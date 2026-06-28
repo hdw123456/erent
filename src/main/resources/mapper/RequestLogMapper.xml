@@ -57,6 +57,28 @@
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
+    <select id="countRequestLogs" parameterType="com.example.aigateway.dto.RequestLogQuery" resultType="long">
+        SELECT COUNT(*)
+        FROM request_log
+        <where>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="modelId != null">
+                AND model_id = #{modelId}
+            </if>
+            <if test="statusCode != null">
+                AND status_code = #{statusCode}
+            </if>
+            <if test="startTime != null">
+                AND created_at &gt;= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND created_at &lt;= #{endTime}
+            </if>
+        </where>
+    </select>
+
     <select id="getModelUsageStats" resultMap="ModelUsageStatsResultMap">
         SELECT m.id AS model_id,
                m.code AS model_code,

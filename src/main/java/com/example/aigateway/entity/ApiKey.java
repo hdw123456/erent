@@ -12,6 +12,7 @@ public class ApiKey {
     private Date updatedAt;
     private Date lastUsedAt;
     private String prefix;
+    private boolean enabled;
 
     public ApiKey() {
     }
@@ -24,6 +25,7 @@ public class ApiKey {
         this.updatedAt = new Date();
         this.lastUsedAt = null;
         this.prefix = prefix;
+        this.enabled = true;
     }
 
     public String getKeyHash() {
@@ -88,5 +90,13 @@ public class ApiKey {
 
     public void setLastUsedAt(Date lastUsedAt) {
         this.lastUsedAt = lastUsedAt;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 }

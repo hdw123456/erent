@@ -16,6 +16,7 @@ public interface RequestLogMapper {
             @Param("limit") int limit
     );
     List<RequestLog> searchRequestLogs(RequestLogQuery query);
+    long countRequestLogs(RequestLogQuery query);
     List<ModelUsageStats> getModelUsageStats(
             @Param("startTime") Date startTime,
             @Param("endTime") Date endTime

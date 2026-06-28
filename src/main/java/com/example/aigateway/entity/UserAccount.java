@@ -14,18 +14,18 @@ public class UserAccount {
     public UserAccount() {
     }
 
-    public UserAccount(String username, String email, String password) {
+    public UserAccount(String username, String email, String passwordHash) {
         this.username = username;
         this.email = email;
-        this.passwordHash = password;
+        this.passwordHash = passwordHash;
         this.enabled = true;
     }
 
-    public UserAccount(long id, String username, String email, String password, Date createdAt, Date updatedAt) {
+    public UserAccount(long id, String username, String email, String passwordHash, Date createdAt, Date updatedAt) {
         this.id = id;
         this.username = username;
         this.email = email;
-        this.passwordHash = password;
+        this.passwordHash = passwordHash;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -84,5 +84,9 @@ public class UserAccount {
 
     public void setUpdatedAt(Date updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public boolean isEnabled() {
+        return enabled != null && enabled;
     }
 }

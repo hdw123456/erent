@@ -10,6 +10,11 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
 
 mybatis:
   mapper-locations: classpath*:mapper/*.xml
@@ -22,4 +27,10 @@ server:
 logging:
   level:
     com.example.aigateway: info
+  file:
+    name: logs/ai-gateway.log
 
+jasypt:
+  encryptor:
+    password: ${JASYPT_PASSWORD}
+    algorithm: PBEWITHHMACSHA512ANDAES_256

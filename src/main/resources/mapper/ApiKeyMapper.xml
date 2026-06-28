@@ -18,9 +18,13 @@
         SELECT * FROM api_key WHERE name = #{apiName}
     </select>
 
+    <select id="getApiKeyById" resultMap="apiKeyResultMap">
+        SELECT * FROM api_key WHERE id = #{apiKeyId}
+    </select>
+
     <update id="updateApiKey" parameterType="com.example.aigateway.entity.ApiKey">
         UPDATE api_key
-        SET name = #{name}, prefix = #{prefix}, updated_at = #{updatedAt}
+        SET name = #{name}, prefix = #{prefix}, updated_at = CURRENT_TIMESTAMP, enabled = #{enabled}
         WHERE id = #{id}
     </update>
 
@@ -37,5 +41,6 @@
         <result property="lastUsedAt" column="last_used_at"/>
         <result property="prefix" column="prefix"/>
         <result property="name" column="name"/>
+        <result property="enabled" column="enabled"/>
     </resultMap>
 </mapper>

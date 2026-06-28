@@ -10,6 +10,7 @@ import com.example.aigateway.mapper.UsageRecordMapper;
 import com.example.aigateway.mapper.WalletMapper;
 import com.example.aigateway.mapper.WalletTransactionMapper;
 import java.math.BigDecimal;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,7 +70,11 @@ public class BillingService {
                 requestId
         ));
 
-        throw new BusinessException("PROVIDER_CALL_FAILED", "Provider call failed, pre-deduct transaction rolled back");
+        throw new BusinessException(
+                "PROVIDER_CALL_FAILED",
+                "Provider call failed, pre-deduct transaction rolled back",
+                HttpStatus.INTERNAL_SERVER_ERROR
+        );
     }
 
     private Wallet lockWallet(Long userId) {
@@ -79,14 +84,14 @@ public class BillingService {
 
         Wallet wallet = walletMapper.getWalletByUserIdForUpdate(userId);
         if (wallet == null) {
-            throw new BusinessException("WALLET_NOT_FOUND", "Wallet not found for user: " + userId);
+            throw new BusinessException("WALLET_NOT_FOUND", "Wallet not found for user: " + userId, HttpStatus.NOT_FOUND);
         }
         return wallet;
     }
 
     private BigDecimal deduct(Wallet wallet, BigDecimal costAmount) {
         if (wallet.getBalance().compareTo(costAmount) < 0) {
-            throw new BusinessException("INSUFFICIENT_BALANCE", "Wallet balance is not enough");
+            throw new BusinessException("INSUFFICIENT_BALANCE", "Wallet balance is not enough", HttpStatus.CONFLICT);
         }
 
         BigDecimal balanceAfter = wallet.getBalance().subtract(costAmount);
