@@ -34,7 +34,7 @@ public class RequestLogService {
             Date endTime
     ) {
         if (userId == null) {
-            throw new BusinessException("USER_ID_REQUIRED", "X-User-Id header is required", HttpStatus.UNAUTHORIZED);
+            throw new BusinessException("USER_ID_REQUIRED", "Authenticated user is required", HttpStatus.UNAUTHORIZED);
         }
 
         int currentPage = page == null ? DEFAULT_PAGE : page;

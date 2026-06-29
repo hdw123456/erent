@@ -40,13 +40,17 @@ WHERE NOT EXISTS (
       AND pr.enabled = TRUE
 );
 
-INSERT IGNORE INTO user_account (username, password_hash, email, enabled)
-VALUES ('hdw', 'mock_bcrypt_hash_for_hdw', 'hdw@example.com', TRUE),
-       ('alice', 'mock_bcrypt_hash_for_alice', 'alice@example.com', TRUE),
-       ('bob', 'mock_bcrypt_hash_for_bob', 'bob@example.com', TRUE),
-       ('carol', 'mock_bcrypt_hash_for_carol', 'carol@example.com', TRUE),
-       ('dave', 'mock_bcrypt_hash_for_dave', 'dave@example.com', TRUE),
-       ('admin', 'mock_bcrypt_hash_for_admin', 'admin@example.com', TRUE);
+INSERT INTO user_account (username, password_hash, email, enabled)
+VALUES ('hdw', '$2a$10$9Nl/Zcx3RH6m/XtYLf.NtOpkdCQM6WSktsdx3kqDjmP/uToi5ouJO', 'hdw@example.com', TRUE),
+       ('alice', '$2a$10$9Nl/Zcx3RH6m/XtYLf.NtOpkdCQM6WSktsdx3kqDjmP/uToi5ouJO', 'alice@example.com', TRUE),
+       ('bob', '$2a$10$9Nl/Zcx3RH6m/XtYLf.NtOpkdCQM6WSktsdx3kqDjmP/uToi5ouJO', 'bob@example.com', TRUE),
+       ('carol', '$2a$10$9Nl/Zcx3RH6m/XtYLf.NtOpkdCQM6WSktsdx3kqDjmP/uToi5ouJO', 'carol@example.com', TRUE),
+       ('dave', '$2a$10$9Nl/Zcx3RH6m/XtYLf.NtOpkdCQM6WSktsdx3kqDjmP/uToi5ouJO', 'dave@example.com', TRUE),
+       ('admin', '$2a$10$9Nl/Zcx3RH6m/XtYLf.NtOpkdCQM6WSktsdx3kqDjmP/uToi5ouJO', 'admin@example.com', TRUE)
+ON DUPLICATE KEY UPDATE
+       password_hash = VALUES(password_hash),
+       email = VALUES(email),
+       enabled = VALUES(enabled);
 
 INSERT IGNORE INTO user_role (user_id, role_id)
 SELECT u.id, r.id

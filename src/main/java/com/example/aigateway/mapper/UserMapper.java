@@ -15,5 +15,7 @@ public interface UserMapper {
     List<UserApiKey> getAllUserApiKeys();
     void updateUser(UserAccount user);
     void deleteUser(@Param("id") long id);
+    List<String> getRole(@Param("id") long id);
+    void insertUserRole(@Param("userId") long userId, @Param("roleCode") String roleCode);
     
 }

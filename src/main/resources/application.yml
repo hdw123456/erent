@@ -34,3 +34,7 @@ jasypt:
   encryptor:
     password: ${JASYPT_PASSWORD}
     algorithm: PBEWITHHMACSHA512ANDAES_256
+
+jwt:
+  secret: ${JWT_SECRET:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+  access-token-expire-ms: ${JWT_ACCESS_TOKEN_EXPIRE_MS:900000}

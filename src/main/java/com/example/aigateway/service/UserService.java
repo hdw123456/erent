@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import java.util.List;
 
 import java.math.BigDecimal;
 
@@ -42,6 +43,8 @@ public class UserService {
         UserAccount user = new UserAccount(username, email, passwordEncoder.encode(password));
         userMapper.insertUser(user);
 
+        userMapper.insertUserRole(user.getId(), "USER"); // Assign default role
+
         Wallet wallet = new Wallet(user.getId(), BigDecimal.ZERO);
         walletMapper.insertWallet(wallet);
         logger.info("User registered successfully; Username={} , UserID={}", username, user.getId());
@@ -58,5 +61,18 @@ public class UserService {
             throw new BusinessException("USER_NOT_FOUND", "User not found", HttpStatus.NOT_FOUND);
         }
         return userAccount;
+    }
+
+    public UserAccount getUserByUsername(String username) {
+        UserAccount userAccount = userMapper.getUserByUsername(username);
+        if (userAccount == null) {
+            logger.warn("User not found, username={}", username);
+            throw new BusinessException("USER_NOT_FOUND", "User not found", HttpStatus.NOT_FOUND);
+        }
+        return userAccount;
+    }
+
+    public List<String> getRole(long userId) {
+        return userMapper.getRole(userId);
     }
 }

@@ -8,6 +8,7 @@ import com.example.aigateway.dto.response.ApiKeyResponse;
 import com.example.aigateway.dto.response.CreateApiKeyResponse;
 import com.example.aigateway.entity.ApiKey;
 import com.example.aigateway.service.ApiKeyService;
+import com.example.aigateway.service.CurrentUserService;
 
 import jakarta.validation.Valid;
 
@@ -16,7 +17,6 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,33 +26,34 @@ import java.util.ArrayList;
 @RequestMapping("/api/api-keys")
 public class ApiKeyController {
     private final ApiKeyService apiKeyService;
+    private final CurrentUserService currentUserService;
 
-    public ApiKeyController(ApiKeyService apiKeyService) {
+    public ApiKeyController(ApiKeyService apiKeyService, CurrentUserService currentUserService) {
         this.apiKeyService = apiKeyService;
+        this.currentUserService = currentUserService;
     }
 
     @PatchMapping("/{id}/disable")
-    public void disableApiKey(@RequestHeader("X-User-Id") Long userId, @PathVariable long id) {
-        apiKeyService.disableApiKey(userId, id);
+    public void disableApiKey(@PathVariable long id) {
+        apiKeyService.disableApiKey(currentUserService.getCurrentUserId(), id);
     }
 
     @PatchMapping("/{id}")
     public ApiKeyResponse updateApiKey(
-            @RequestHeader("X-User-Id") Long userId,
             @PathVariable long id,
             @Valid @RequestBody UpdateApiKeyRequest request
     ) {
-        return toResponse(apiKeyService.updateApiKey(userId, id, request.getName()));
+        return toResponse(apiKeyService.updateApiKey(currentUserService.getCurrentUserId(), id, request.getName()));
     }
 
     @PostMapping
-    public CreateApiKeyResponse createApiKey(@RequestHeader("X-User-Id") Long userId, @Valid @RequestBody CreateApiKeyRequest request) {
-        return apiKeyService.createApiKey(userId, request.getName());
+    public CreateApiKeyResponse createApiKey(@Valid @RequestBody CreateApiKeyRequest request) {
+        return apiKeyService.createApiKey(currentUserService.getCurrentUserId(), request.getName());
     }
 
     @GetMapping
-    public List<ApiKeyResponse> getUserApiKeyByUserId(@RequestHeader("X-User-Id") Long userId) {
-        List<ApiKey> apiKeys = apiKeyService.getUserApiKeys(userId);
+    public List<ApiKeyResponse> getUserApiKeyByUserId() {
+        List<ApiKey> apiKeys = apiKeyService.getUserApiKeys(currentUserService.getCurrentUserId());
         List<ApiKeyResponse> apiKeyResponses = new ArrayList<>();
         for (ApiKey apiKey : apiKeys) {
             apiKeyResponses.add(toResponse(apiKey));

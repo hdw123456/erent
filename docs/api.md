@@ -2,7 +2,7 @@
 
 本文档记录当前阶段已经实现或规划中的 HTTP API。
 
-当前第 4 阶段第 1 周暂未接入 JWT，临时使用请求头 `X-User-Id` 表示当前登录用户。第 7 周实现 Spring Security + JWT 后，再替换为真实认证上下文。
+当前已接入 Spring Security + JWT。除注册、登录、刷新 Token 和健康检查外，业务接口需要通过 `Authorization: Bearer <accessToken>` 识别当前用户。
 
 统一错误响应：
 
@@ -20,7 +20,7 @@
 | HTTP 状态码 | 场景 |
 | --- | --- |
 | `400` | 请求参数或 JSON 请求体校验失败 |
-| `401` | 缺少认证信息，例如缺少 `X-User-Id` |
+| `401` | 缺少认证信息，例如缺少或传入无效 Access Token |
 | `403` | 当前用户无权访问该资源 |
 | `404` | 资源或接口路径不存在 |
 | `409` | 业务状态冲突 |
@@ -85,7 +85,7 @@ GET /api/users/me
 请求头：
 
 ```text
-X-User-Id: 1
+Authorization: Bearer <accessToken>
 ```
 
 成功响应：
@@ -114,7 +114,7 @@ X-User-Id: 1
 curl：
 
 ```powershell
-curl.exe "http://localhost:8080/api/users/me" -H "X-User-Id: 1"
+curl.exe "http://localhost:8080/api/users/me" -H "Authorization: Bearer <accessToken>"
 ```
 
 ## API Key
@@ -129,7 +129,7 @@ POST /api/api-keys
 
 ```text
 Content-Type: application/json
-X-User-Id: 1
+Authorization: Bearer <accessToken>
 ```
 
 请求体：
@@ -161,7 +161,7 @@ X-User-Id: 1
 curl：
 
 ```powershell
-curl.exe -X POST "http://localhost:8080/api/api-keys" -H "Content-Type: application/json" -H "X-User-Id: 1" -d "{\"name\":\"local-test-key\"}"
+curl.exe -X POST "http://localhost:8080/api/api-keys" -H "Content-Type: application/json" -H "Authorization: Bearer <accessToken>" -d "{\"name\":\"local-test-key\"}"
 ```
 
 ### 查询平台 API Key 列表
@@ -173,7 +173,7 @@ GET /api/api-keys
 请求头：
 
 ```text
-X-User-Id: 1
+Authorization: Bearer <accessToken>
 ```
 
 成功响应：
@@ -194,7 +194,7 @@ X-User-Id: 1
 curl：
 
 ```powershell
-curl.exe "http://localhost:8080/api/api-keys" -H "X-User-Id: 1"
+curl.exe "http://localhost:8080/api/api-keys" -H "Authorization: Bearer <accessToken>"
 ```
 
 ### 更新平台 API Key
@@ -207,7 +207,7 @@ PATCH /api/api-keys/{id}
 
 ```text
 Content-Type: application/json
-X-User-Id: 1
+Authorization: Bearer <accessToken>
 ```
 
 路径参数：
@@ -240,7 +240,7 @@ id: API Key ID
 curl：
 
 ```powershell
-curl.exe -X PATCH "http://localhost:8080/api/api-keys/1" -H "Content-Type: application/json" -H "X-User-Id: 1" -d "{\"name\":\"new-key-name\"}"
+curl.exe -X PATCH "http://localhost:8080/api/api-keys/1" -H "Content-Type: application/json" -H "Authorization: Bearer <accessToken>" -d "{\"name\":\"new-key-name\"}"
 ```
 
 ### 禁用平台 API Key
@@ -275,7 +275,7 @@ HTTP 200
 curl：
 
 ```powershell
-curl.exe -X PATCH "http://localhost:8080/api/api-keys/1/disable" -H "X-User-Id: 1"
+curl.exe -X PATCH "http://localhost:8080/api/api-keys/1/disable" -H "Authorization: Bearer <accessToken>"
 ```
 
 ## Provider Key
@@ -290,7 +290,7 @@ POST /api/provider-keys
 
 ```text
 Content-Type: application/json
-X-User-Id: 1
+Authorization: Bearer <accessToken>
 ```
 
 请求体：
@@ -321,7 +321,7 @@ X-User-Id: 1
 curl：
 
 ```powershell
-curl.exe -X POST "http://localhost:8080/api/provider-keys" -H "Content-Type: application/json" -H "X-User-Id: 1" -d "{\"providerId\":1,\"rawProviderKey\":\"sk-provider-secret\"}"
+curl.exe -X POST "http://localhost:8080/api/provider-keys" -H "Content-Type: application/json" -H "Authorization: Bearer <accessToken>" -d "{\"providerId\":1,\"rawProviderKey\":\"sk-provider-secret\"}"
 ```
 
 ### 更新 Provider API Key
@@ -334,7 +334,7 @@ PATCH /api/provider-keys/{id}
 
 ```text
 Content-Type: application/json
-X-User-Id: 1
+Authorization: Bearer <accessToken>
 ```
 
 路径参数：
@@ -365,7 +365,7 @@ id: Provider Key ID
 curl：
 
 ```powershell
-curl.exe -X PATCH "http://localhost:8080/api/provider-keys/1" -H "Content-Type: application/json" -H "X-User-Id: 1" -d "{\"rawProviderKey\":\"sk-provider-secret-new\"}"
+curl.exe -X PATCH "http://localhost:8080/api/provider-keys/1" -H "Content-Type: application/json" -H "Authorization: Bearer <accessToken>" -d "{\"rawProviderKey\":\"sk-provider-secret-new\"}"
 ```
 
 ## Model
@@ -374,6 +374,12 @@ curl.exe -X PATCH "http://localhost:8080/api/provider-keys/1" -H "Content-Type: 
 
 ```text
 GET /api/models
+```
+
+请求头：
+
+```text
+Authorization: Bearer <accessToken>
 ```
 
 查询参数：
@@ -403,8 +409,8 @@ providerCode: 可选，例如 OPENAI
 curl：
 
 ```powershell
-curl.exe "http://localhost:8080/api/models"
-curl.exe "http://localhost:8080/api/models?providerCode=OPENAI"
+curl.exe "http://localhost:8080/api/models" -H "Authorization: Bearer <accessToken>"
+curl.exe "http://localhost:8080/api/models?providerCode=OPENAI" -H "Authorization: Bearer <accessToken>"
 ```
 
 ## Request Log
@@ -418,7 +424,7 @@ GET /api/request-logs
 请求头：
 
 ```text
-X-User-Id: 1
+Authorization: Bearer <accessToken>
 ```
 
 查询参数：
@@ -471,16 +477,14 @@ endTime: 可选，格式 yyyy-MM-dd HH:mm:ss
 curl：
 
 ```powershell
-curl.exe "http://localhost:8080/api/request-logs?page=1&size=10" -H "X-User-Id: 1"
-curl.exe "http://localhost:8080/api/request-logs?page=1&size=10&modelId=1&statusCode=200&startTime=2026-06-01%2000:00:00&endTime=2026-06-30%2023:59:59" -H "X-User-Id: 1"
+curl.exe "http://localhost:8080/api/request-logs?page=1&size=10" -H "Authorization: Bearer <accessToken>"
+curl.exe "http://localhost:8080/api/request-logs?page=1&size=10&modelId=1&statusCode=200&startTime=2026-06-01%2000:00:00&endTime=2026-06-30%2023:59:59" -H "Authorization: Bearer <accessToken>"
 ```
 
 ## Gateway
 
-以下接口是后续阶段规划，当前第 1 周暂未实现。
+以下接口是后续阶段规划，当前暂未实现。
 
 ```text
-POST /api/auth/login
-POST /api/auth/refresh
 POST /v1/chat/completions
 ```

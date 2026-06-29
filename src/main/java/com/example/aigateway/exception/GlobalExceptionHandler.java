@@ -45,7 +45,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ErrorResponse> handleMissingRequestHeader(MissingRequestHeaderException exception) {
-        HttpStatus status = "X-User-Id".equals(exception.getHeaderName())
+        HttpStatus status = "Authorization".equalsIgnoreCase(exception.getHeaderName())
                 ? HttpStatus.UNAUTHORIZED
                 : HttpStatus.BAD_REQUEST;
         String code = status == HttpStatus.UNAUTHORIZED ? "UNAUTHORIZED" : "MISSING_REQUEST_HEADER";
