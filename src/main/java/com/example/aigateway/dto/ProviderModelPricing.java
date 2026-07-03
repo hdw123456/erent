@@ -6,6 +6,7 @@ public class ProviderModelPricing {
     private Long providerId;
     private String providerCode;
     private String providerName;
+    private String providerBaseUrl;
     private Long modelId;
     private String modelCode;
     private String modelDisplayName;
@@ -35,6 +36,14 @@ public class ProviderModelPricing {
 
     public void setProviderName(String providerName) {
         this.providerName = providerName;
+    }
+
+    public String getProviderBaseUrl() {
+        return providerBaseUrl;
+    }
+
+    public void setProviderBaseUrl(String providerBaseUrl) {
+        this.providerBaseUrl = providerBaseUrl;
     }
 
     public Long getModelId() {

@@ -10,4 +10,9 @@ public interface ModelMapper {
     );
 
     List<ProviderModelPricing> getAllAvailableModelsAndPricing();
+
+    ProviderModelPricing getAvailableModelByCode(
+            @Param("providerCode") String providerCode,
+            @Param("modelCode") String modelCode
+    );
 }

@@ -68,6 +68,22 @@ public class ApiKeyService {
         return apiKeyMapper.getUserApi(userId);
     }
 
+    public ApiKey authenticateRawApiKey(String rawApiKey) {
+        if (rawApiKey == null || rawApiKey.isBlank()) {
+            throw new BusinessException("INVALID_API_KEY", "Invalid API key", HttpStatus.UNAUTHORIZED);
+        }
+
+        ApiKey apiKey = apiKeyMapper.getApiKeyByKeyHash(apiKeyHasher.hash(rawApiKey));
+        if (apiKey == null) {
+            throw new BusinessException("INVALID_API_KEY", "Invalid API key", HttpStatus.UNAUTHORIZED);
+        }
+        if (!apiKey.isEnabled()) {
+            throw new BusinessException("API_KEY_DISABLED", "API key is disabled", HttpStatus.UNAUTHORIZED);
+        }
+        apiKeyMapper.updateLastUsedAt(apiKey.getId());
+        return apiKey;
+    }
+
     private ApiKey getOwnedApiKey(long userId, long apiKeyId) {
         ApiKey apiKey = apiKeyMapper.getApiKeyById(apiKeyId);
         if (apiKey == null) {

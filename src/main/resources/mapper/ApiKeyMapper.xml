@@ -22,9 +22,19 @@
         SELECT * FROM api_key WHERE id = #{apiKeyId}
     </select>
 
+    <select id="getApiKeyByKeyHash" resultMap="apiKeyResultMap">
+        SELECT * FROM api_key WHERE key_hash = #{keyHash}
+    </select>
+
     <update id="updateApiKey" parameterType="com.example.aigateway.entity.ApiKey">
         UPDATE api_key
         SET name = #{name}, prefix = #{prefix}, updated_at = CURRENT_TIMESTAMP, enabled = #{enabled}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateLastUsedAt">
+        UPDATE api_key
+        SET last_used_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id}
     </update>
 

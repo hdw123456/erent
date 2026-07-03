@@ -7,6 +7,7 @@ VALUES ('USER', '普通用户'),
 
 INSERT IGNORE INTO provider (code, name, enabled)
 VALUES ('OPENAI', 'OpenAI', TRUE),
+       ('OPENROUTER', 'OpenRouter', TRUE),
        ('CLAUDE', 'Anthropic Claude', TRUE),
        ('GEMINI', 'Google Gemini', TRUE);
 
@@ -15,6 +16,7 @@ SELECT p.id, seed.code, seed.display_name, seed.enabled
 FROM (
     SELECT 'OPENAI' AS provider_code, 'gpt-4.1-mini' AS code, 'GPT-4.1 Mini' AS display_name, TRUE AS enabled
     UNION ALL SELECT 'OPENAI', 'gpt-4.1', 'GPT-4.1', TRUE
+    UNION ALL SELECT 'OPENROUTER', 'openrouter/free', 'OpenRouter Free Models Router', TRUE
     UNION ALL SELECT 'CLAUDE', 'claude-3-5-sonnet', 'Claude 3.5 Sonnet', TRUE
     UNION ALL SELECT 'GEMINI', 'gemini-1.5-flash', 'Gemini 1.5 Flash', TRUE
     UNION ALL SELECT 'GEMINI', 'gemini-1.5-pro', 'Gemini 1.5 Pro', TRUE
@@ -26,6 +28,7 @@ SELECT m.id, seed.input_token_price, seed.output_token_price, 'CNY', TRUE
 FROM (
     SELECT 'OPENAI' AS provider_code, 'gpt-4.1-mini' AS model_code, 0.00000100 AS input_token_price, 0.00000400 AS output_token_price
     UNION ALL SELECT 'OPENAI', 'gpt-4.1', 0.00000500, 0.00001500
+    UNION ALL SELECT 'OPENROUTER', 'openrouter/free', 0.00000000, 0.00000000
     UNION ALL SELECT 'CLAUDE', 'claude-3-5-sonnet', 0.00000300, 0.00001500
     UNION ALL SELECT 'GEMINI', 'gemini-1.5-flash', 0.00000050, 0.00000150
     UNION ALL SELECT 'GEMINI', 'gemini-1.5-pro', 0.00000300, 0.00001000

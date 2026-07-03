@@ -10,7 +10,9 @@ public interface ApiKeyMapper {
     List<ApiKey> getUserApi(@Param("userId") long userId);
     ApiKey getApiKeyByName(@Param("apiName") String apiName);
     ApiKey getApiKeyById(@Param("apiKeyId") long apiKeyId);
+    ApiKey getApiKeyByKeyHash(@Param("keyHash") String keyHash);
     void updateApiKey(ApiKey apiKey);
+    void updateLastUsedAt(@Param("id") long id);
     void deleteApiKey(ApiKey apiKey);
     
 }

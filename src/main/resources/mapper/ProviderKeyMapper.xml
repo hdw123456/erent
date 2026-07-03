@@ -33,6 +33,16 @@
         LIMIT 1
     </select>
 
+    <select id="getEncryptedProviderKeyForCall" resultType="String">
+        SELECT encrypted_key
+        FROM provider_key
+        WHERE provider_id = #{providerId}
+          AND enabled = TRUE
+          AND (user_id = #{userId} OR user_id IS NULL)
+        ORDER BY CASE WHEN user_id = #{userId} THEN 0 ELSE 1 END, id ASC
+        LIMIT 1
+    </select>
+
     <resultMap id="ProviderKeyResultMap" type="com.example.aigateway.entity.ProviderKey">
         <id property="id" column="id"/>
         <result property="providerId" column="provider_id"/>

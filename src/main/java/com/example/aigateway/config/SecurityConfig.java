@@ -1,6 +1,7 @@
 package com.example.aigateway.config;
 
 import com.example.aigateway.security.JwtAuthFilter;
+import com.example.aigateway.security.ApiKeyAuthFilter;
 import java.time.OffsetDateTime;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,9 +25,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
+    private final ApiKeyAuthFilter apiKeyAuthFilter;
     private final JwtAuthFilter jwtAuthFilter;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+    public SecurityConfig(ApiKeyAuthFilter apiKeyAuthFilter, JwtAuthFilter jwtAuthFilter) {
+        this.apiKeyAuthFilter = apiKeyAuthFilter;
         this.jwtAuthFilter = jwtAuthFilter;
     }
 
@@ -50,6 +53,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider)
+                .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(exceptionHandling -> exceptionHandling
                         .authenticationEntryPoint((request, response, exception) -> writeErrorResponse(

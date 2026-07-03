@@ -488,3 +488,92 @@ curl.exe "http://localhost:8080/api/request-logs?page=1&size=10&modelId=1&status
 ```text
 POST /v1/chat/completions
 ```
+
+### Implemented gateway endpoints
+
+#### Non-streaming chat completion
+
+```text
+POST /api/chat/completions
+```
+
+Request headers:
+
+```text
+Content-Type: application/json
+Authorization: Bearer <platformApiKey>
+```
+
+Request body:
+
+```json
+{
+  "providerCode": "OPENROUTER",
+  "model": "openrouter/free",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Say hello in one short sentence."
+    }
+  ],
+  "temperature": 0.7,
+  "max_tokens": 64
+}
+```
+
+Success response:
+
+```json
+{
+  "requestId": "req_xxx",
+  "id": "chatcmpl_xxx",
+  "model": "openrouter/free",
+  "message": {
+    "role": "assistant",
+    "content": "Hello, glad to meet you."
+  },
+  "finishReason": "stop",
+  "usage": {
+    "promptTokens": 12,
+    "completionTokens": 8,
+    "totalTokens": 20
+  }
+}
+```
+
+curl:
+
+```powershell
+curl.exe -X POST "http://localhost:8080/api/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer <platformApiKey>" -d "{\"providerCode\":\"OPENROUTER\",\"model\":\"openrouter/free\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one short sentence.\"}],\"max_tokens\":64}"
+```
+
+#### SSE streaming chat completion
+
+```text
+POST /api/chat/completions/stream
+```
+
+Request headers:
+
+```text
+Content-Type: application/json
+Accept: text/event-stream
+Authorization: Bearer <platformApiKey>
+```
+
+Request body uses the same `ChatRequest` shape as the non-streaming endpoint. The service forces `stream=true` before calling the upstream provider.
+
+curl:
+
+```powershell
+curl.exe -N -X POST "http://localhost:8080/api/chat/completions/stream" -H "Content-Type: application/json" -H "Accept: text/event-stream" -H "Authorization: Bearer <platformApiKey>" -d "{\"providerCode\":\"OPENROUTER\",\"model\":\"openrouter/free\",\"messages\":[{\"role\":\"user\",\"content\":\"Count from one to three.\"}],\"max_tokens\":64}"
+```
+
+Notes:
+
+- Management APIs use JWT access tokens.
+- Gateway chat APIs use platform API keys created by `POST /api/api-keys`.
+- OpenRouter uses the OpenAI-compatible adapter with `OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`.
+- Configure the upstream key with `OPENROUTER_API_KEY`; do not store raw keys in source code.
+- Provider failures are returned as unified errors such as `PROVIDER_TIMEOUT`, `PROVIDER_RATE_LIMITED`, `PROVIDER_AUTH_FAILED`, or `PROVIDER_UPSTREAM_ERROR`.
+- `request_log` records `providerId`, `modelId`, `apiKeyId`, `statusCode`, `latencyMs`, and `errorCode`; it does not record Authorization headers or provider keys.
