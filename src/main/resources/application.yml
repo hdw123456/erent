@@ -25,6 +25,13 @@ server:
   port: ${SERVER_PORT:8080}
 
 gateway:
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    fail-open: ${RATE_LIMIT_FAIL_OPEN:true}
+    window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}
+    api-key-limit: ${RATE_LIMIT_API_KEY_LIMIT:60}
+    user-limit: ${RATE_LIMIT_USER_LIMIT:120}
+    ip-limit: ${RATE_LIMIT_IP_LIMIT:300}
   upstream:
     connect-timeout-ms: ${UPSTREAM_CONNECT_TIMEOUT_MS:3000}
     read-timeout-ms: ${UPSTREAM_READ_TIMEOUT_MS:60000}
