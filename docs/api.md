@@ -481,20 +481,52 @@ curl.exe "http://localhost:8080/api/request-logs?page=1&size=10" -H "Authorizati
 curl.exe "http://localhost:8080/api/request-logs?page=1&size=10&modelId=1&statusCode=200&startTime=2026-06-01%2000:00:00&endTime=2026-06-30%2023:59:59" -H "Authorization: Bearer <accessToken>"
 ```
 
-## Gateway
-
-以下接口是后续阶段规划，当前暂未实现。
+## Wallet
 
 ```text
-POST /v1/chat/completions
+GET /api/wallets/me
 ```
 
-### Implemented gateway endpoints
+Request headers:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Success response:
+
+```json
+{
+  "id": 1,
+  "userId": 1,
+  "balance": 20.000000
+}
+```
+
+The endpoint always uses the current authenticated user and does not accept a `userId` request parameter.
+
+## Admin
+
+```text
+GET /api/admin/health
+```
+
+Request headers:
+
+```text
+Authorization: Bearer <adminAccessToken>
+```
+
+Only users with `ROLE_ADMIN` can access `/api/admin/**`. A normal user receives `403`.
+
+## Gateway
+
+Gateway endpoints use platform API keys, not JWT access tokens.
 
 #### Non-streaming chat completion
 
 ```text
-POST /api/chat/completions
+POST /v1/chat/completions
 ```
 
 Request headers:
@@ -544,13 +576,13 @@ Success response:
 curl:
 
 ```powershell
-curl.exe -X POST "http://localhost:8080/api/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer <platformApiKey>" -d "{\"providerCode\":\"OPENROUTER\",\"model\":\"openrouter/free\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one short sentence.\"}],\"max_tokens\":64}"
+curl.exe -X POST "http://localhost:8080/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer <platformApiKey>" -d "{\"providerCode\":\"OPENROUTER\",\"model\":\"openrouter/free\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one short sentence.\"}],\"max_tokens\":64}"
 ```
 
 #### SSE streaming chat completion
 
 ```text
-POST /api/chat/completions/stream
+POST /v1/chat/completions/stream
 ```
 
 Request headers:
@@ -566,13 +598,14 @@ Request body uses the same `ChatRequest` shape as the non-streaming endpoint. Th
 curl:
 
 ```powershell
-curl.exe -N -X POST "http://localhost:8080/api/chat/completions/stream" -H "Content-Type: application/json" -H "Accept: text/event-stream" -H "Authorization: Bearer <platformApiKey>" -d "{\"providerCode\":\"OPENROUTER\",\"model\":\"openrouter/free\",\"messages\":[{\"role\":\"user\",\"content\":\"Count from one to three.\"}],\"max_tokens\":64}"
+curl.exe -N -X POST "http://localhost:8080/v1/chat/completions/stream" -H "Content-Type: application/json" -H "Accept: text/event-stream" -H "Authorization: Bearer <platformApiKey>" -d "{\"providerCode\":\"OPENROUTER\",\"model\":\"openrouter/free\",\"messages\":[{\"role\":\"user\",\"content\":\"Count from one to three.\"}],\"max_tokens\":64}"
 ```
 
 Notes:
 
 - Management APIs use JWT access tokens.
 - Gateway chat APIs use platform API keys created by `POST /api/api-keys`.
+- `/api/chat/**` remains available as an internal compatibility alias, while `/v1/chat/**` is the OpenAI-compatible public path.
 - OpenRouter uses the OpenAI-compatible adapter with `OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`.
 - Configure the upstream key with `OPENROUTER_API_KEY`; do not store raw keys in source code.
 - Provider failures are returned as unified errors such as `PROVIDER_TIMEOUT`, `PROVIDER_RATE_LIMITED`, `PROVIDER_AUTH_FAILED`, or `PROVIDER_UPSTREAM_ERROR`.

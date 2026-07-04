@@ -32,7 +32,9 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getServletPath().startsWith("/api/chat/");
+        String servletPath = request.getServletPath();
+        return !servletPath.startsWith("/api/chat/")
+                && !servletPath.startsWith("/v1/chat/");
     }
 
     @Override
