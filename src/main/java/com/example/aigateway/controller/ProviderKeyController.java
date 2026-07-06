@@ -28,11 +28,7 @@ public class ProviderKeyController {
     public ProviderKeyResponse saveProviderKey(
             @Valid @RequestBody CreateProviderKeyRequest request
     ) {
-        return providerKeyService.saveProviderKey(
-                request.getProviderId(),
-                request.getRawProviderKey(),
-                currentUserService.getCurrentUserId()
-        );
+        return providerKeyService.saveProviderKey(request, currentUserService.getCurrentUserId());
     }
 
     @PatchMapping("/{id}")
@@ -40,6 +36,6 @@ public class ProviderKeyController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateProviderKeyRequest request
     ) {
-        return providerKeyService.updateProviderKey(id, request.getRawProviderKey(), currentUserService.getCurrentUserId());
+        return providerKeyService.updateProviderKey(id, request, currentUserService.getCurrentUserId());
     }
 }

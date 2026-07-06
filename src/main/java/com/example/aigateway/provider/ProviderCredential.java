@@ -6,6 +6,8 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 
 public class ProviderCredential {
+    private Long providerKeyId;
+    private String providerKeyType;
     private Long providerId;
     private String providerCode;
     private String apiKey;
@@ -16,6 +18,18 @@ public class ProviderCredential {
     }
 
     public ProviderCredential(Long providerId, String providerCode, String apiKey, String baseUrl) {
+        this(null, null, providerId, providerCode, apiKey, baseUrl);
+    }
+
+    public ProviderCredential(
+            Long providerKeyId,
+            String providerKeyType,
+            Long providerId,
+            String providerCode,
+            String apiKey,
+            String baseUrl) {
+        this.providerKeyId = providerKeyId;
+        this.providerKeyType = providerKeyType;
         this.providerId = providerId;
         this.providerCode = providerCode;
         this.apiKey = apiKey;
@@ -42,6 +56,22 @@ public class ProviderCredential {
             );
         }
         return baseUrl;
+    }
+
+    public Long getProviderKeyId() {
+        return providerKeyId;
+    }
+
+    public void setProviderKeyId(Long providerKeyId) {
+        this.providerKeyId = providerKeyId;
+    }
+
+    public String getProviderKeyType() {
+        return providerKeyType;
+    }
+
+    public void setProviderKeyType(String providerKeyType) {
+        this.providerKeyType = providerKeyType;
     }
 
     public Long getProviderId() {

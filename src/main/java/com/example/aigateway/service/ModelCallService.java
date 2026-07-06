@@ -16,10 +16,12 @@ import com.example.aigateway.security.ApiKeyPrincipal;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.TimeoutException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -27,6 +29,7 @@ import reactor.core.Disposable;
 import com.example.aigateway.entity.UsageRecord;
 import com.example.aigateway.mapper.IdempotencyRecordMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.erdtman.jcs.JsonCanonicalizer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +43,8 @@ public class ModelCallService {
     private static final String STATUS_FAILED = "FAILED";
 
     private final ProviderAdapterFactory providerAdapterFactory;
-    private final ProviderCredentialService providerCredentialService;
+    private final ProviderKeySelectorService providerKeySelectorService;
+    private final ProviderKeyAvailabilityService providerKeyAvailabilityService;
     private final ModelService modelService;
     private final RequestLogMapper requestLogMapper;
     private final UpstreamErrorService upstreamErrorService;
@@ -50,7 +54,8 @@ public class ModelCallService {
 
     public ModelCallService(
             ProviderAdapterFactory providerAdapterFactory,
-            ProviderCredentialService providerCredentialService,
+            ProviderKeySelectorService providerKeySelectorService,
+            ProviderKeyAvailabilityService providerKeyAvailabilityService,
             ModelService modelService,
             RequestLogMapper requestLogMapper,
             UpstreamErrorService upstreamErrorService,
@@ -58,7 +63,8 @@ public class ModelCallService {
             IdempotencyRecordMapper idempotencyRecordMapper,
             ObjectMapper objectMapper) {
         this.providerAdapterFactory = providerAdapterFactory;
-        this.providerCredentialService = providerCredentialService;
+        this.providerKeySelectorService = providerKeySelectorService;
+        this.providerKeyAvailabilityService = providerKeyAvailabilityService;
         this.modelService = modelService;
         this.requestLogMapper = requestLogMapper;
         this.upstreamErrorService = upstreamErrorService;
@@ -68,15 +74,23 @@ public class ModelCallService {
     }
 
     public ChatResponse chat(ChatRequest request, ApiKeyPrincipal principal, String idempotencyKey) {
-        return chat(request, principal, idempotencyKey, writeJson(request));
+        return chat(request, principal, idempotencyKey, "model_call", writeJson(request));
     }
 
     public ChatResponse chat(
             ChatRequest request,
             ApiKeyPrincipal principal,
             String idempotencyKey,
-            String idempotencyPayload
-    ) {
+            String idempotencyPayload) {
+        return chat(request, principal, idempotencyKey, "model_call", idempotencyPayload);
+    }
+
+    public ChatResponse chat(
+            ChatRequest request,
+            ApiKeyPrincipal principal,
+            String idempotencyKey,
+            String idempotencyRoute,
+            String idempotencyPayload) {
         requirePrincipal(principal);
         request.setStream(false);
 
@@ -84,35 +98,64 @@ public class ModelCallService {
         long startedAt = System.nanoTime();
         ProviderModelPricing model = null;
         IdempotencyRecord idempotencyRecord = null;
+        String scope = idempotencyScope(principal);
+        String payload = canonicalizePayload(hasText(idempotencyPayload) ? idempotencyPayload : writeJson(request));
+        String requestFingerprint = buildRequestFingerprint("POST", idempotencyRoute, scope, payload);
         if (hasText(idempotencyKey)) {
-            String scope = idempotencyScope(principal);
-            String payload = hasText(idempotencyPayload) ? idempotencyPayload : writeJson(request);
             String idempotencyKeyHash = sha256Hex(idempotencyKey.trim());
-            String requestFingerprint = buildRequestFingerprint("POST", "model_call", scope, payload);
             idempotencyRecord = toIdempotencyRecord(
                     requestId, principal, scope, idempotencyKeyHash, requestFingerprint);
-            IdempotencyRecord existingRecord = checkRequest(idempotencyRecord);
-            if (!requestId.equals(existingRecord.getRequestId())) {
-                return replayIdempotentResponse(existingRecord, requestFingerprint);
+            IdempotencyClaim idempotencyClaim = claimIdempotencyRequest(idempotencyRecord);
+            if (!idempotencyClaim.created()) {
+                return replayIdempotentResponse(idempotencyClaim.record(), requestFingerprint);
             }
+            idempotencyRecord = idempotencyClaim.record();
         }
 
+        ProviderCredential usedCredential = null;
         try {
             model = modelService.getAvailableModelByCode(request.getProviderCode(), request.getModel());
             billingService.ensureWalletCanStartCall(principal.getUserId());
-            ProviderCredential credential = providerCredentialService.resolveForCall(model, principal.getUserId());
+            List<ProviderCredential> credentials = providerKeySelectorService.selectCredentials(model, principal.getUserId());
             ProviderAdapter adapter = providerAdapterFactory.getAdapter(model.getProviderCode());
 
-            ChatResponse response = adapter.chat(request, credential);
+            ChatResponse response = null;
+            BusinessException lastProviderException = null;
+            for (int index = 0; index < credentials.size(); index++) {
+                ProviderCredential credential = credentials.get(index);
+                usedCredential = credential;
+                try {
+                    response = adapter.chat(request, credential);
+                    providerKeyAvailabilityService.markSuccess(credential.getProviderKeyId());
+                    break;
+                } catch (Throwable providerThrowable) {
+                    BusinessException providerException = upstreamErrorService.toBusinessException(providerThrowable);
+                    lastProviderException = providerException;
+                    providerKeyAvailabilityService.markFailure(
+                            credential.getProviderKeyId(), providerException, providerThrowable);
+                    if (index == credentials.size() - 1 || !shouldTryNextCredential(providerException)) {
+                        throw providerException;
+                    }
+                }
+            }
+            if (response == null) {
+                throw lastProviderException == null
+                        ? new BusinessException("PROVIDER_EMPTY_RESPONSE", "Provider returned empty response",
+                                HttpStatus.BAD_GATEWAY)
+                        : lastProviderException;
+            }
             response.setRequestId(requestId);
 
-            RequestLog succeslog = toRequestLog(requestId, principal, model, HttpStatus.OK.value(), startedAt, null);
-            writeUsageRecord(succeslog, response.getUsage(), model, idempotencyId(idempotencyRecord), writeJson(response));
+            RequestLog succeslog = toRequestLog(
+                    requestId, principal, model, providerKeyId(usedCredential), HttpStatus.OK.value(), startedAt, null);
+            writeUsageRecord(succeslog, response.getUsage(), model, idempotencyId(idempotencyRecord), requestFingerprint,
+                    writeJson(response));
             return response;
         } catch (Throwable throwable) {
             BusinessException exception = upstreamErrorService.toBusinessException(throwable);
             RequestLog failedLog = toRequestLog(
-                    requestId, principal, model, exception.getStatus().value(), startedAt, exception.getCode());
+                    requestId, principal, model, providerKeyId(usedCredential), exception.getStatus().value(),
+                    startedAt, exception.getCode());
             billingService.recordFailedRequestWithoutCharge(
                     failedLog, idempotencyId(idempotencyRecord), exception.getCode());
             throw exception;
@@ -129,13 +172,15 @@ public class ModelCallService {
         AtomicBoolean logged = new AtomicBoolean(false);
         AtomicReference<Disposable> subscriptionRef = new AtomicReference<>();
         AtomicReference<ProviderModelPricing> modelRef = new AtomicReference<>();
+        AtomicReference<ProviderCredential> credentialRef = new AtomicReference<>();
         ProviderModelPricing model = null;
 
         try {
             model = modelService.getAvailableModelByCode(request.getProviderCode(), request.getModel());
             modelRef.set(model);
             billingService.ensureWalletCanStartCall(principal.getUserId());
-            ProviderCredential credential = providerCredentialService.resolveForCall(model, principal.getUserId());
+            ProviderCredential credential = providerKeySelectorService.selectCredentials(model, principal.getUserId()).get(0);
+            credentialRef.set(credential);
             ProviderAdapter adapter = providerAdapterFactory.getAdapter(model.getProviderCode());
             ProviderModelPricing resolvedModel = model;
 
@@ -143,15 +188,20 @@ public class ModelCallService {
                     data -> sendData(emitter, subscriptionRef, data),
                     throwable -> {
                         BusinessException exception = upstreamErrorService.toBusinessException(throwable);
+                        providerKeyAvailabilityService.markFailure(
+                                providerKeyId(credential), exception, throwable);
                         if (logged.compareAndSet(false, true)) {
-                            writeRequestLog(requestId, principal, resolvedModel, exception.getStatus().value(),
+                            writeRequestLog(requestId, principal, resolvedModel, providerKeyId(credential),
+                                    exception.getStatus().value(),
                                     startedAt, exception.getCode());
                         }
                         sendError(emitter, exception, requestId);
                     },
                     () -> {
+                        providerKeyAvailabilityService.markSuccess(providerKeyId(credential));
                         if (logged.compareAndSet(false, true)) {
-                            writeRequestLog(requestId, principal, resolvedModel, HttpStatus.OK.value(), startedAt,
+                            writeRequestLog(requestId, principal, resolvedModel, providerKeyId(credential),
+                                    HttpStatus.OK.value(), startedAt,
                                     null);
                         }
                         emitter.complete();
@@ -159,8 +209,10 @@ public class ModelCallService {
             subscriptionRef.set(subscription);
         } catch (Throwable throwable) {
             BusinessException exception = upstreamErrorService.toBusinessException(throwable);
+            ProviderCredential credential = credentialRef.get();
+            providerKeyAvailabilityService.markFailure(providerKeyId(credential), exception, throwable);
             if (logged.compareAndSet(false, true)) {
-                writeRequestLog(requestId, principal, model, exception.getStatus().value(), startedAt,
+                writeRequestLog(requestId, principal, model, providerKeyId(credential), exception.getStatus().value(), startedAt,
                         exception.getCode());
             }
             throw exception;
@@ -168,8 +220,15 @@ public class ModelCallService {
 
         emitter.onCompletion(() -> dispose(subscriptionRef));
         emitter.onTimeout(() -> {
+            ProviderCredential credential = credentialRef.get();
+            providerKeyAvailabilityService.markFailure(
+                    providerKeyId(credential),
+                    new BusinessException("PROVIDER_TIMEOUT", "Provider request timed out",
+                            HttpStatus.GATEWAY_TIMEOUT),
+                    new TimeoutException());
             if (logged.compareAndSet(false, true)) {
-                writeRequestLog(requestId, principal, modelRef.get(), HttpStatus.GATEWAY_TIMEOUT.value(), startedAt,
+                writeRequestLog(requestId, principal, modelRef.get(), providerKeyId(credential),
+                        HttpStatus.GATEWAY_TIMEOUT.value(), startedAt,
                         "PROVIDER_TIMEOUT");
             }
             dispose(subscriptionRef);
@@ -177,7 +236,8 @@ public class ModelCallService {
         });
         emitter.onError(throwable -> {
             if (logged.compareAndSet(false, true)) {
-                writeRequestLog(requestId, principal, modelRef.get(), 499, startedAt, "CLIENT_STREAM_CLOSED");
+                writeRequestLog(requestId, principal, modelRef.get(), providerKeyId(credentialRef.get()), 499,
+                        startedAt, "CLIENT_STREAM_CLOSED");
             }
             dispose(subscriptionRef);
         });
@@ -188,6 +248,26 @@ public class ModelCallService {
         if (principal == null || principal.getUserId() == null) {
             throw new BusinessException("UNAUTHORIZED", "API key is required", HttpStatus.UNAUTHORIZED);
         }
+    }
+
+    private boolean shouldTryNextCredential(BusinessException exception) {
+        if (exception == null || exception.getCode() == null) {
+            return false;
+        }
+        return switch (exception.getCode()) {
+            case "PROVIDER_RATE_LIMITED",
+                    "PROVIDER_AUTH_FAILED",
+                    "PROVIDER_TIMEOUT",
+                    "PROVIDER_UNAVAILABLE",
+                    "PROVIDER_UPSTREAM_ERROR",
+                    "PROVIDER_EMPTY_RESPONSE",
+                    "PROVIDER_MODEL_NOT_FOUND" -> true;
+            default -> false;
+        };
+    }
+
+    private Long providerKeyId(ProviderCredential credential) {
+        return credential == null ? null : credential.getProviderKeyId();
     }
 
     private void sendData(SseEmitter emitter, AtomicReference<Disposable> subscriptionRef, String data) {
@@ -224,6 +304,7 @@ public class ModelCallService {
             String requestId,
             ApiKeyPrincipal principal,
             ProviderModelPricing model,
+            Long providerKeyId,
             int statusCode,
             long startedAt,
             String errorCode) {
@@ -235,6 +316,7 @@ public class ModelCallService {
             requestLog.setProviderId(model.getProviderId());
             requestLog.setModelId(model.getModelId());
         }
+        requestLog.setProviderKeyId(providerKeyId);
         requestLog.setStatusCode(statusCode);
         requestLog.setLatencyMs(latencyMs(startedAt));
         requestLog.setErrorCode(errorCode);
@@ -246,10 +328,12 @@ public class ModelCallService {
             String requestId,
             ApiKeyPrincipal principal,
             ProviderModelPricing model,
+            Long providerKeyId,
             int statusCode,
             long startedAt,
             String errorCode) {
-        RequestLog requestLog = toRequestLog(requestId, principal, model, statusCode, startedAt, errorCode);
+        RequestLog requestLog = toRequestLog(requestId, principal, model, providerKeyId, statusCode, startedAt,
+                errorCode);
         requestLogMapper.insertRequestLog(requestLog);
         return requestLog;
     }
@@ -259,17 +343,20 @@ public class ModelCallService {
             Usage usage,
             ProviderModelPricing model,
             Long idempotencyRecordId,
-            String responseJson
-    ) {
+            String requestFingerprint,
+            String responseJson) {
         int promptTokens = token(usage == null ? null : usage.getPromptTokens());
         int completionTokens = token(usage == null ? null : usage.getCompletionTokens());
         int totalTokens = token(usage == null ? null : usage.getTotalTokens());
+        UsageRecord usageRecord = new UsageRecord(requestLog.getRequestId(), requestLog.getUserId(),
+                requestLog.getModelId(), promptTokens, completionTokens, totalTokens,
+                calculateCost(model, promptTokens, completionTokens));
+        usageRecord.setProviderKeyId(requestLog.getProviderKeyId());
         billingService.recordSuccessfulUsage(
                 requestLog,
-                new UsageRecord(requestLog.getRequestId(), requestLog.getUserId(), requestLog.getModelId(),
-                        promptTokens, completionTokens, totalTokens,
-                        calculateCost(model, promptTokens, completionTokens)),
+                usageRecord,
                 idempotencyRecordId,
+                requestFingerprint,
                 responseJson);
     }
 
@@ -302,11 +389,11 @@ public class ModelCallService {
                 expiresAt);
     }
 
-    private IdempotencyRecord checkRequest(IdempotencyRecord record) {
+    private IdempotencyClaim claimIdempotencyRequest(IdempotencyRecord record) {
         int inserted = idempotencyRecordMapper.insertIdempotencyRecordIgnore(record);
 
         if (inserted == 1) {
-            return record;
+            return new IdempotencyClaim(true, record);
         }
         IdempotencyRecord existingRecord = idempotencyRecordMapper.getByScopeAndIdempotencyKeyHash(
                 record.getScope(), record.getIdempotencyKeyHash());
@@ -316,7 +403,7 @@ public class ModelCallService {
                     "Failed to load existing idempotency record",
                     HttpStatus.CONFLICT);
         }
-        return existingRecord;
+        return new IdempotencyClaim(false, existingRecord);
     }
 
     private ChatResponse replayIdempotentResponse(IdempotencyRecord existingRecord, String requestFingerprint) {
@@ -349,6 +436,15 @@ public class ModelCallService {
         }
     }
 
+    private String canonicalizePayload(String payload) {
+        try {
+            JsonCanonicalizer jc = new JsonCanonicalizer(payload);
+            return jc.getEncodedString();
+        } catch (IOException exception) {
+            return payload;
+        }
+    }
+
     private ChatResponse readJson(String json) {
         try {
             return objectMapper.readValue(json, ChatResponse.class);
@@ -368,7 +464,11 @@ public class ModelCallService {
     }
 
     private String buildRequestFingerprint(String method, String route, String scope, String payload) {
-        return sha256Hex(method.toUpperCase() + "\n" + route + "\n" + scope + "\n" + payload);
+        String safeMethod = hasText(method) ? method.toUpperCase() : "POST";
+        String safeRoute = hasText(route) ? route : "model_call";
+        String safeScope = hasText(scope) ? scope : "anonymous";
+        String safePayload = payload == null ? "" : payload;
+        return sha256Hex(safeMethod + "\n" + safeRoute + "\n" + safeScope + "\n" + safePayload);
     }
 
     private Long idempotencyId(IdempotencyRecord record) {
@@ -396,5 +496,8 @@ public class ModelCallService {
                 : model.getOutputTokenPrice();
         return inputTokenPrice.multiply(BigDecimal.valueOf(promptTokens))
                 .add(outputTokenPrice.multiply(BigDecimal.valueOf(completionTokens)));
+    }
+
+    private record IdempotencyClaim(boolean created, IdempotencyRecord record) {
     }
 }

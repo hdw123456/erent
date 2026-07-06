@@ -8,6 +8,7 @@ public class RequestLog {
     private Long userId;
     private Long apiKeyId;
     private Long providerId;
+    private Long providerKeyId;
     private Long modelId;
     private Integer statusCode;
     private Integer latencyMs;
@@ -55,6 +56,14 @@ public class RequestLog {
 
     public void setProviderId(Long providerId) {
         this.providerId = providerId;
+    }
+
+    public Long getProviderKeyId() {
+        return providerKeyId;
+    }
+
+    public void setProviderKeyId(Long providerKeyId) {
+        this.providerKeyId = providerKeyId;
     }
 
     public Long getModelId() {

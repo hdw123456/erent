@@ -7,24 +7,24 @@
 
     <insert id="insertRequestLog" parameterType="com.example.aigateway.entity.RequestLog" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO request_log (
-            request_id, user_id, api_key_id, provider_id, model_id,
+            request_id, user_id, api_key_id, provider_id, provider_key_id, model_id,
             status_code, latency_ms, error_code
         )
         VALUES (
-            #{requestId}, #{userId}, #{apiKeyId}, #{providerId}, #{modelId},
+            #{requestId}, #{userId}, #{apiKeyId}, #{providerId}, #{providerKeyId}, #{modelId},
             #{statusCode}, #{latencyMs}, #{errorCode}
         )
     </insert>
 
     <select id="getRequestLogByRequestId" resultMap="RequestLogResultMap">
-        SELECT id, request_id, user_id, api_key_id, provider_id, model_id,
+        SELECT id, request_id, user_id, api_key_id, provider_id, provider_key_id, model_id,
                status_code, latency_ms, error_code, created_at
         FROM request_log
         WHERE request_id = #{requestId}
     </select>
 
     <select id="getRequestLogsByUserId" resultMap="RequestLogResultMap">
-        SELECT id, request_id, user_id, api_key_id, provider_id, model_id,
+        SELECT id, request_id, user_id, api_key_id, provider_id, provider_key_id, model_id,
                status_code, latency_ms, error_code, created_at
         FROM request_log
         WHERE user_id = #{userId}
@@ -33,7 +33,7 @@
     </select>
 
     <select id="searchRequestLogs" parameterType="com.example.aigateway.dto.RequestLogQuery" resultMap="RequestLogResultMap">
-        SELECT id, request_id, user_id, api_key_id, provider_id, model_id,
+        SELECT id, request_id, user_id, api_key_id, provider_id, provider_key_id, model_id,
                status_code, latency_ms, error_code, created_at
         FROM request_log
         <where>
@@ -110,6 +110,7 @@
         <result property="userId" column="user_id"/>
         <result property="apiKeyId" column="api_key_id"/>
         <result property="providerId" column="provider_id"/>
+        <result property="providerKeyId" column="provider_key_id"/>
         <result property="modelId" column="model_id"/>
         <result property="statusCode" column="status_code"/>
         <result property="latencyMs" column="latency_ms"/>

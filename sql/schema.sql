@@ -52,14 +52,44 @@ CREATE TABLE IF NOT EXISTS provider_key (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     provider_id BIGINT NOT NULL,
     user_id BIGINT NULL,
+    provider_key_type VARCHAR(32) NOT NULL DEFAULT 'OFFICIAL_API_KEY',
+    base_url VARCHAR(255) NULL,
     encrypted_key TEXT NOT NULL,
     key_hint VARCHAR(32) NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    schedulable BOOLEAN NOT NULL DEFAULT TRUE,
+    priority INT NOT NULL DEFAULT 100,
+    rate_limited_until DATETIME NULL,
+    overloaded_until DATETIME NULL,
+    temp_disabled_until DATETIME NULL,
+    expires_at DATETIME NULL,
+    last_error_code VARCHAR(64) NULL,
+    last_error_message VARCHAR(255) NULL,
+    last_used_at DATETIME NULL,
+    last_success_at DATETIME NULL,
+    last_failed_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_provider_key_user_id (user_id),
+    KEY idx_provider_key_schedulable (provider_id, enabled, status, schedulable, priority),
     CONSTRAINT fk_provider_key_provider FOREIGN KEY (provider_id) REFERENCES provider (id),
     CONSTRAINT fk_provider_key_user FOREIGN KEY (user_id) REFERENCES user_account (id)
+);
+
+CREATE TABLE IF NOT EXISTS provider_key_quota_window (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    provider_key_id BIGINT NOT NULL,
+    window_type VARCHAR(32) NOT NULL,
+    quota_limit DECIMAL(18, 6) NULL,
+    quota_used DECIMAL(18, 6) NOT NULL DEFAULT 0,
+    window_start_at DATETIME NULL,
+    reset_at DATETIME NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_provider_key_window (provider_key_id, window_type),
+    KEY idx_quota_window_reset (reset_at),
+    CONSTRAINT fk_quota_window_provider_key FOREIGN KEY (provider_key_id) REFERENCES provider_key (id)
 );
 
 CREATE TABLE IF NOT EXISTS model (
@@ -113,6 +143,7 @@ CREATE TABLE IF NOT EXISTS request_log (
     user_id BIGINT NOT NULL,
     api_key_id BIGINT NULL,
     provider_id BIGINT NULL,
+    provider_key_id BIGINT NULL,
     model_id BIGINT NULL,
     status_code INT NOT NULL,
     latency_ms INT NOT NULL,
@@ -120,9 +151,11 @@ CREATE TABLE IF NOT EXISTS request_log (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_request_log_request_id (request_id),
     KEY idx_request_log_user_created (user_id, created_at),
+    KEY idx_request_log_provider_key_created (provider_key_id, created_at),
     CONSTRAINT fk_request_log_user FOREIGN KEY (user_id) REFERENCES user_account (id),
     CONSTRAINT fk_request_log_api_key FOREIGN KEY (api_key_id) REFERENCES api_key (id),
     CONSTRAINT fk_request_log_provider FOREIGN KEY (provider_id) REFERENCES provider (id),
+    CONSTRAINT fk_request_log_provider_key FOREIGN KEY (provider_key_id) REFERENCES provider_key (id),
     CONSTRAINT fk_request_log_model FOREIGN KEY (model_id) REFERENCES model (id)
 );
 
@@ -152,6 +185,7 @@ CREATE TABLE IF NOT EXISTS usage_record (
     request_id VARCHAR(64) NOT NULL,
     user_id BIGINT NOT NULL,
     model_id BIGINT NOT NULL,
+    provider_key_id BIGINT NULL,
     input_tokens INT NOT NULL DEFAULT 0,
     output_tokens INT NOT NULL DEFAULT 0,
     total_tokens INT NOT NULL DEFAULT 0,
@@ -159,7 +193,9 @@ CREATE TABLE IF NOT EXISTS usage_record (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_usage_record_request_id (request_id),
     KEY idx_usage_record_user_created (user_id, created_at),
+    KEY idx_usage_record_provider_key_created (provider_key_id, created_at),
     CONSTRAINT fk_usage_record_user FOREIGN KEY (user_id) REFERENCES user_account (id),
+    CONSTRAINT fk_usage_record_provider_key FOREIGN KEY (provider_key_id) REFERENCES provider_key (id),
     CONSTRAINT fk_usage_record_model FOREIGN KEY (model_id) REFERENCES model (id)
 );
 

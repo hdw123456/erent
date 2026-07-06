@@ -69,7 +69,8 @@ public class ModelCallController {
                 request,
                 principal,
                 idempotencyKey,
-                idempotencyPayload("chat_completions", rawBody)
+                "chat_completions",
+                rawBody
         );
         return ResponseEntity.ok(gatewayResponseAdapter.toOpenAiChatCompletion(response));
     }
@@ -90,7 +91,8 @@ public class ModelCallController {
                 request,
                 principal,
                 idempotencyKey,
-                idempotencyPayload("messages", rawBody)
+                "messages",
+                rawBody
         );
         return ResponseEntity.ok(gatewayResponseAdapter.toAnthropicMessage(response));
     }
@@ -124,7 +126,8 @@ public class ModelCallController {
                 request,
                 principal,
                 idempotencyKey,
-                idempotencyPayload("responses", rawBody)
+                "responses",
+                rawBody
         );
         return ResponseEntity.ok(gatewayResponseAdapter.toResponses(response));
     }
@@ -156,7 +159,4 @@ public class ModelCallController {
                 .body(emitter);
     }
 
-    private String idempotencyPayload(String protocol, String rawBody) {
-        return protocol + "\n" + rawBody;
-    }
 }

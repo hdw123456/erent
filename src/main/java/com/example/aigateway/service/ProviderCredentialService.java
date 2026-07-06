@@ -1,6 +1,7 @@
 package com.example.aigateway.service;
 
 import com.example.aigateway.dto.ProviderModelPricing;
+import com.example.aigateway.entity.ProviderKey;
 import com.example.aigateway.exception.BusinessException;
 import com.example.aigateway.mapper.ProviderKeyMapper;
 import com.example.aigateway.provider.ProviderCredential;
@@ -46,19 +47,70 @@ public class ProviderCredentialService {
 
     public ProviderCredential resolveForCall(ProviderModelPricing model, Long userId) {
         String providerCode = normalize(model.getProviderCode());
-        String rawProviderKey = resolveProviderKey(model.getProviderId(), providerCode, userId);
+        ProviderKey providerKey = providerKeyMapper
+                .listSchedulableProviderKeysForCall(model.getProviderId(), userId, 1)
+                .stream()
+                .findFirst()
+                .orElse(null);
+        if (providerKey != null) {
+            return toCredential(model, providerKey);
+        }
+        return resolveEnvironmentCredential(model);
+    }
+
+    public ProviderCredential toCredential(ProviderModelPricing model, ProviderKey providerKey) {
+        if (providerKey == null) {
+            throw new BusinessException(
+                    "PROVIDER_KEY_NOT_CONFIGURED",
+                    "Provider key is not configured",
+                    HttpStatus.BAD_GATEWAY
+            );
+        }
+        String providerCode = normalize(model.getProviderCode());
+        String rawProviderKey = decryptProviderKey(providerKey.getEncryptedKey());
         ProviderCredential credential = new ProviderCredential(
+                providerKey.getId(),
+                providerKey.getProviderKeyType(),
                 model.getProviderId(),
                 providerCode,
                 rawProviderKey,
-                resolveBaseUrl(providerCode)
+                resolveProviderKeyBaseUrl(providerCode, providerKey)
         );
         credential.setHeaders(resolveHeaders(providerCode));
         return credential;
     }
 
-    private String resolveProviderKey(Long providerId, String providerCode, Long userId) {
-        String encryptedKey = providerKeyMapper.getEncryptedProviderKeyForCall(providerId, userId);
+    public ProviderCredential resolveEnvironmentCredential(ProviderModelPricing model) {
+        String providerCode = normalize(model.getProviderCode());
+        if (supportsEnvironmentCredential(providerCode)) {
+            ProviderCredential credential = new ProviderCredential(
+                    null,
+                    "ENVIRONMENT",
+                    model.getProviderId(),
+                    providerCode,
+                    openrouterApiKey,
+                    resolveBaseUrl(providerCode)
+            );
+            credential.setHeaders(resolveHeaders(providerCode));
+            return credential;
+        }
+
+        throw new BusinessException(
+                "PROVIDER_KEY_NOT_CONFIGURED",
+                "Provider key is not configured",
+                HttpStatus.BAD_GATEWAY
+        );
+    }
+
+    public boolean supportsEnvironmentCredential(ProviderModelPricing model) {
+        return model != null && supportsEnvironmentCredential(normalize(model.getProviderCode()));
+    }
+
+    private boolean supportsEnvironmentCredential(String providerCode) {
+        return "OPENROUTER".equals(providerCode) && openrouterApiKey != null && !openrouterApiKey.isBlank();
+    }
+
+    private String decryptProviderKey(String encryptedKey) {
         if (encryptedKey != null && !encryptedKey.isBlank()) {
             try {
                 return providerKeyCrypto.decrypt(encryptedKey);
@@ -71,15 +123,18 @@ public class ProviderCredentialService {
             }
         }
 
-        if ("OPENROUTER".equals(providerCode) && openrouterApiKey != null && !openrouterApiKey.isBlank()) {
-            return openrouterApiKey;
-        }
-
         throw new BusinessException(
                 "PROVIDER_KEY_NOT_CONFIGURED",
                 "Provider key is not configured",
                 HttpStatus.BAD_GATEWAY
-        );
+                );
+    }
+
+    private String resolveProviderKeyBaseUrl(String providerCode, ProviderKey providerKey) {
+        if (providerKey.getBaseUrl() != null && !providerKey.getBaseUrl().isBlank()) {
+            return providerKey.getBaseUrl().trim();
+        }
+        return resolveBaseUrl(providerCode);
     }
 
     private String resolveBaseUrl(String providerCode) {

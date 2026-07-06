@@ -37,6 +37,8 @@ gateway:
     read-timeout-ms: ${UPSTREAM_READ_TIMEOUT_MS:60000}
     response-timeout-ms: ${UPSTREAM_RESPONSE_TIMEOUT_MS:65000}
     request-timeout-ms: ${UPSTREAM_REQUEST_TIMEOUT_MS:70000}
+  provider-key:
+    max-failover-attempts: ${PROVIDER_KEY_MAX_FAILOVER_ATTEMPTS:3}
 
 logging:
   level:

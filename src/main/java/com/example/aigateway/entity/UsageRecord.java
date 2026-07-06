@@ -8,6 +8,7 @@ public class UsageRecord {
     private String requestId;
     private Long userId;
     private Long modelId;
+    private Long providerKeyId;
     private Integer inputTokens;
     private Integer outputTokens;
     private Integer totalTokens;
@@ -58,6 +59,14 @@ public class UsageRecord {
 
     public void setModelId(Long modelId) {
         this.modelId = modelId;
+    }
+
+    public Long getProviderKeyId() {
+        return providerKeyId;
+    }
+
+    public void setProviderKeyId(Long providerKeyId) {
+        this.providerKeyId = providerKeyId;
     }
 
     public Integer getInputTokens() {

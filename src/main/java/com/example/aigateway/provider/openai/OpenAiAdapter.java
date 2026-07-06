@@ -4,6 +4,7 @@ import com.example.aigateway.client.UpstreamHttpClient;
 import com.example.aigateway.dto.request.ChatRequest;
 import com.example.aigateway.dto.response.ChatResponse;
 import com.example.aigateway.exception.BusinessException;
+import com.example.aigateway.exception.ProviderUpstreamException;
 import com.example.aigateway.provider.ProviderAdapter;
 import com.example.aigateway.provider.ProviderCredential;
 import java.util.LinkedHashMap;
@@ -98,25 +99,37 @@ public class OpenAiAdapter implements ProviderAdapter {
     private BusinessException toProviderException(WebClientResponseException exception) {
         int statusCode = exception.getStatusCode().value();
         return switch (statusCode) {
-            case 429 -> new BusinessException(
+            case 429 -> new ProviderUpstreamException(
                     "PROVIDER_RATE_LIMITED",
                     "Provider rate limit exceeded",
-                    HttpStatus.TOO_MANY_REQUESTS
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    statusCode,
+                    exception.getHeaders(),
+                    exception.getResponseBodyAsString()
             );
-            case 401, 403 -> new BusinessException(
+            case 401, 403 -> new ProviderUpstreamException(
                     "PROVIDER_AUTH_FAILED",
                     "Provider authentication failed",
-                    HttpStatus.BAD_GATEWAY
+                    HttpStatus.BAD_GATEWAY,
+                    statusCode,
+                    exception.getHeaders(),
+                    exception.getResponseBodyAsString()
             );
-            case 404 -> new BusinessException(
+            case 404 -> new ProviderUpstreamException(
                     "PROVIDER_MODEL_NOT_FOUND",
                     "Provider model not found",
-                    HttpStatus.BAD_GATEWAY
+                    HttpStatus.BAD_GATEWAY,
+                    statusCode,
+                    exception.getHeaders(),
+                    exception.getResponseBodyAsString()
             );
-            default -> new BusinessException(
+            default -> new ProviderUpstreamException(
                     "PROVIDER_UPSTREAM_ERROR",
                     "Provider request failed",
-                    HttpStatus.BAD_GATEWAY
+                    HttpStatus.BAD_GATEWAY,
+                    statusCode,
+                    exception.getHeaders(),
+                    exception.getResponseBodyAsString()
             );
         };
     }
