@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.aigateway.mapper.IdempotencyRecordMapper">
+
+    <sql id="BaseColumns">
+        id, api_key_id, idempotency_key, request_hash, request_id, status,
+        response_json, error_code, expires_at, created_at, updated_at
+    </sql>
+
+    <insert id="insertIdempotencyRecord" parameterType="com.example.aigateway.entity.IdempotencyRecord"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO idempotency_record (
+            api_key_id, idempotency_key, request_hash, request_id, status, expires_at
+        )
+        VALUES (
+            #{apiKeyId}, #{idempotencyKey}, #{requestHash}, #{requestId}, #{status}, #{expiresAt}
+        )
+    </insert>
+
+    <insert id="insertIdempotencyRecordIgnore" parameterType="com.example.aigateway.entity.IdempotencyRecord"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT IGNORE INTO idempotency_record (
+            api_key_id, idempotency_key, request_hash, request_id, status, expires_at
+        )
+        VALUES (
+            #{apiKeyId}, #{idempotencyKey}, #{requestHash}, #{requestId}, #{status}, #{expiresAt}
+        )
+    </insert>
+
+    <select id="getByApiKeyIdAndIdempotencyKey" resultMap="IdempotencyRecordResultMap">
+        SELECT
+        <include refid="BaseColumns"/>
+        FROM idempotency_record
+        WHERE api_key_id = #{apiKeyId}
+          AND idempotency_key = #{idempotencyKey}
+    </select>
+
+    <select id="getByApiKeyIdAndIdempotencyKeyForUpdate" resultMap="IdempotencyRecordResultMap">
+        SELECT
+        <include refid="BaseColumns"/>
+        FROM idempotency_record
+        WHERE api_key_id = #{apiKeyId}
+          AND idempotency_key = #{idempotencyKey}
+        FOR UPDATE
+    </select>
+
+    <select id="getByRequestId" resultMap="IdempotencyRecordResultMap">
+        SELECT
+        <include refid="BaseColumns"/>
+        FROM idempotency_record
+        WHERE request_id = #{requestId}
+    </select>
+
+    <update id="updateIdempotencyRecordResult">
+        UPDATE idempotency_record
+        SET status = #{status},
+            response_json = #{responseJson},
+            error_code = #{errorCode}
+        WHERE id = #{id}
+    </update>
+
+    <resultMap id="IdempotencyRecordResultMap" type="com.example.aigateway.entity.IdempotencyRecord">
+        <id property="id" column="id"/>
+        <result property="apiKeyId" column="api_key_id"/>
+        <result property="idempotencyKey" column="idempotency_key"/>
+        <result property="requestHash" column="request_hash"/>
+        <result property="requestId" column="request_id"/>
+        <result property="status" column="status"/>
+        <result property="responseJson" column="response_json"/>
+        <result property="errorCode" column="error_code"/>
+        <result property="expiresAt" column="expires_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+</mapper>

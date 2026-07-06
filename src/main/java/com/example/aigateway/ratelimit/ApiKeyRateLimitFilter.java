@@ -39,9 +39,7 @@ public class ApiKeyRateLimitFilter extends OncePerRequestFilter {
         if (!properties.isEnabled()) {
             return true;
         }
-        String servletPath = request.getServletPath();
-        return !servletPath.startsWith("/api/chat/")
-                && !servletPath.startsWith("/v1/chat/");
+        return !isGatewayPath(request.getServletPath());
     }
 
     @Override
@@ -85,6 +83,14 @@ public class ApiKeyRateLimitFilter extends OncePerRequestFilter {
         }
 
         return request.getRemoteAddr();
+    }
+
+    private boolean isGatewayPath(String servletPath) {
+        return servletPath.startsWith("/api/chat/")
+                || servletPath.startsWith("/v1/")
+                || servletPath.equals("/chat/completions")
+                || servletPath.startsWith("/responses")
+                || servletPath.startsWith("/backend-api/codex/");
     }
 
     private void writeRateLimitError(

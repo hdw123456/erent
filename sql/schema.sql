@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS wallet_transaction (
     balance_after DECIMAL(18, 6) NOT NULL,
     request_id VARCHAR(64) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_wallet_transaction_request_type (request_id, type),
     KEY idx_wallet_transaction_wallet_created (wallet_id, created_at),
     CONSTRAINT fk_wallet_transaction_wallet FOREIGN KEY (wallet_id) REFERENCES wallet (id)
 );
@@ -125,6 +126,24 @@ CREATE TABLE IF NOT EXISTS request_log (
     CONSTRAINT fk_request_log_model FOREIGN KEY (model_id) REFERENCES model (id)
 );
 
+CREATE TABLE IF NOT EXISTS idempotency_record (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    api_key_id BIGINT NOT NULL,
+    idempotency_key VARCHAR(128) NOT NULL,
+    request_hash CHAR(64) NOT NULL,
+    request_id VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    response_json JSON NULL,
+    error_code VARCHAR(64) NULL,
+    expires_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_idempotency_api_key_key (api_key_id, idempotency_key),
+    UNIQUE KEY uk_idempotency_request_id (request_id),
+    KEY idx_idempotency_expires_at (expires_at),
+    CONSTRAINT fk_idempotency_api_key FOREIGN KEY (api_key_id) REFERENCES api_key (id)
+);
+
 CREATE TABLE IF NOT EXISTS usage_record (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     request_id VARCHAR(64) NOT NULL,
@@ -135,8 +154,8 @@ CREATE TABLE IF NOT EXISTS usage_record (
     total_tokens INT NOT NULL DEFAULT 0,
     cost_amount DECIMAL(18, 6) NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_usage_record_request_id (request_id),
     KEY idx_usage_record_user_created (user_id, created_at),
     CONSTRAINT fk_usage_record_user FOREIGN KEY (user_id) REFERENCES user_account (id),
     CONSTRAINT fk_usage_record_model FOREIGN KEY (model_id) REFERENCES model (id)
 );
-

@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import reactor.core.publisher.Flux;
 
 @Component
@@ -31,8 +32,7 @@ public class OpenAiAdapter implements ProviderAdapter {
 
     @Override
     public ChatResponse chat(ChatRequest request, ProviderCredential credential) {
-        OpenaiRequest upstreamRequest = OpenaiRequest.from(request);
-        upstreamRequest.setStream(false);
+        Object upstreamRequest = upstreamRequest(request, false);
 
         OpenaiResponse response;
         try {
@@ -60,13 +60,29 @@ public class OpenAiAdapter implements ProviderAdapter {
 
     @Override
     public Flux<String> stream(ChatRequest request, ProviderCredential credential) {
-        OpenaiRequest upstreamRequest = OpenaiRequest.from(request);
-        upstreamRequest.setStream(true);
+        Object upstreamRequest = upstreamRequest(request, true);
         return upstreamHttpClient.postJsonStream(
                 chatCompletionsUrl(credential),
                 upstreamRequest,
                 authorizationHeaders(credential)
         );
+    }
+
+    private Object upstreamRequest(ChatRequest request, boolean stream) {
+        if (request.getOpenAiPayload() == null) {
+            OpenaiRequest upstreamRequest = OpenaiRequest.from(request);
+            upstreamRequest.setStream(stream);
+            return upstreamRequest;
+        }
+
+        ObjectNode payload = request.getOpenAiPayload().deepCopy();
+        payload.remove(List.of("provider", "provider_code", "providerCode"));
+        if (payload.has("maxTokens") && !payload.has("max_tokens")) {
+            payload.set("max_tokens", payload.get("maxTokens"));
+        }
+        payload.remove("maxTokens");
+        payload.put("stream", stream);
+        return payload;
     }
 
     private String chatCompletionsUrl(ProviderCredential credential) {

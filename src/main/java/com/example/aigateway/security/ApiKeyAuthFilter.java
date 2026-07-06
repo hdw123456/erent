@@ -32,9 +32,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String servletPath = request.getServletPath();
-        return !servletPath.startsWith("/api/chat/")
-                && !servletPath.startsWith("/v1/chat/");
+        return !isGatewayPath(request.getServletPath());
     }
 
     @Override
@@ -43,14 +41,13 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-        String authorization = request.getHeader("Authorization");
-        if (authorization == null || !authorization.startsWith(BEARER_PREFIX)) {
+        String rawApiKey = extractApiKey(request);
+        if (rawApiKey == null) {
             writeError(response, HttpServletResponse.SC_UNAUTHORIZED, "UNAUTHORIZED", "API key is required");
             return;
         }
 
         try {
-            String rawApiKey = authorization.substring(BEARER_PREFIX.length());
             ApiKey apiKey = apiKeyService.authenticateRawApiKey(rawApiKey);
             ApiKeyPrincipal principal = new ApiKeyPrincipal(apiKey.getId(), apiKey.getUserId(), apiKey.getPrefix());
             UsernamePasswordAuthenticationToken authentication =
@@ -61,6 +58,35 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         } catch (BusinessException exception) {
             writeError(response, exception.getStatus().value(), exception.getCode(), exception.getMessage());
         }
+    }
+
+    private boolean isGatewayPath(String servletPath) {
+        return servletPath.startsWith("/api/chat/")
+                || servletPath.startsWith("/v1/")
+                || servletPath.equals("/chat/completions")
+                || servletPath.startsWith("/responses")
+                || servletPath.startsWith("/backend-api/codex/");
+    }
+
+    private String extractApiKey(HttpServletRequest request) {
+        String authorization = request.getHeader("Authorization");
+        if (authorization != null && authorization.startsWith(BEARER_PREFIX)) {
+            return blankToNull(authorization.substring(BEARER_PREFIX.length()));
+        }
+
+        String apiKey = blankToNull(request.getHeader("x-api-key"));
+        if (apiKey != null) {
+            return apiKey;
+        }
+
+        return blankToNull(request.getHeader("x-goog-api-key"));
+    }
+
+    private String blankToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private void writeError(HttpServletResponse response, int status, String code, String message) throws IOException {

@@ -1,7 +1,9 @@
 package com.example.aigateway.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -36,6 +38,9 @@ public class ChatRequest {
     @Positive
     @JsonAlias("max_tokens")
     private Integer maxTokens;
+
+    @JsonIgnore
+    private ObjectNode openAiPayload;
 
     public String getProviderCode() {
         return providerCode;
@@ -83,6 +88,14 @@ public class ChatRequest {
 
     public void setMaxTokens(Integer maxTokens) {
         this.maxTokens = maxTokens;
+    }
+
+    public ObjectNode getOpenAiPayload() {
+        return openAiPayload;
+    }
+
+    public void setOpenAiPayload(ObjectNode openAiPayload) {
+        this.openAiPayload = openAiPayload;
     }
 
     public static class Message {

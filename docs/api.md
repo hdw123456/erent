@@ -523,90 +523,81 @@ Only users with `ROLE_ADMIN` can access `/api/admin/**`. A normal user receives 
 
 Gateway endpoints use platform API keys, not JWT access tokens.
 
-#### Non-streaming chat completion
+Accepted API key headers:
 
 ```text
-POST /v1/chat/completions
-```
-
-Request headers:
-
-```text
-Content-Type: application/json
 Authorization: Bearer <platformApiKey>
+x-api-key: <platformApiKey>
+x-goog-api-key: <platformApiKey>
 ```
 
-Request body:
+### Agent-compatible endpoints
+
+```text
+GET  /v1/models
+POST /v1/chat/completions
+POST /chat/completions
+POST /v1/messages
+POST /v1/messages/count_tokens
+POST /v1/responses
+POST /responses
+POST /backend-api/codex/responses
+```
+
+`/v1/chat/completions` accepts OpenAI-compatible request bodies. Top-level fields such as `tools`, `tool_choice`, and `stream_options` are preserved when forwarding to OpenAI-compatible providers. The project-private fields `providerCode`, `provider_code`, and `provider` may be used to choose a configured provider and are removed before upstream forwarding.
+
+`/v1/messages` accepts Anthropic Messages-style bodies and maps `system`, `messages`, `max_tokens`, and `stream` into the internal request model.
+
+`/v1/responses` accepts OpenAI Responses-style bodies and maps `instructions`, `input`, `max_output_tokens`, and `stream` into the internal request model.
+
+Non-streaming gateway requests may include `Idempotency-Key`. If present, the same API key + same idempotency key + same raw protocol payload replays the same stored result and will not charge twice. If absent, the request is processed normally without strict retry de-duplication.
+
+### OpenAI Chat Completions example
+
+```powershell
+curl.exe -X POST "http://localhost:8080/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer <platformApiKey>" -H "Idempotency-Key: demo-001" -d "{\"providerCode\":\"OPENROUTER\",\"model\":\"openrouter/free\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"lookup\"}}],\"tool_choice\":\"auto\",\"max_tokens\":64}"
+```
+
+Success response shape:
 
 ```json
 {
-  "providerCode": "OPENROUTER",
+  "id": "chatcmpl_xxx",
+  "object": "chat.completion",
+  "created": 1783290000,
   "model": "openrouter/free",
-  "messages": [
+  "choices": [
     {
-      "role": "user",
-      "content": "Say hello in one short sentence."
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello."
+      },
+      "finish_reason": "stop"
     }
   ],
-  "temperature": 0.7,
-  "max_tokens": 64
-}
-```
-
-Success response:
-
-```json
-{
-  "requestId": "req_xxx",
-  "id": "chatcmpl_xxx",
-  "model": "openrouter/free",
-  "message": {
-    "role": "assistant",
-    "content": "Hello, glad to meet you."
-  },
-  "finishReason": "stop",
   "usage": {
-    "promptTokens": 12,
-    "completionTokens": 8,
-    "totalTokens": 20
+    "prompt_tokens": 12,
+    "completion_tokens": 8,
+    "total_tokens": 20
   }
 }
 ```
 
-curl:
-
-```powershell
-curl.exe -X POST "http://localhost:8080/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer <platformApiKey>" -d "{\"providerCode\":\"OPENROUTER\",\"model\":\"openrouter/free\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one short sentence.\"}],\"max_tokens\":64}"
-```
-
-#### SSE streaming chat completion
+### Internal compatibility endpoint
 
 ```text
-POST /v1/chat/completions/stream
+POST /api/chat/completions
+POST /api/chat/completions/stream
 ```
 
-Request headers:
-
-```text
-Content-Type: application/json
-Accept: text/event-stream
-Authorization: Bearer <platformApiKey>
-```
-
-Request body uses the same `ChatRequest` shape as the non-streaming endpoint. The service forces `stream=true` before calling the upstream provider.
-
-curl:
-
-```powershell
-curl.exe -N -X POST "http://localhost:8080/v1/chat/completions/stream" -H "Content-Type: application/json" -H "Accept: text/event-stream" -H "Authorization: Bearer <platformApiKey>" -d "{\"providerCode\":\"OPENROUTER\",\"model\":\"openrouter/free\",\"messages\":[{\"role\":\"user\",\"content\":\"Count from one to three.\"}],\"max_tokens\":64}"
-```
+These endpoints keep the project's internal `ChatRequest` and `ChatResponse` shapes.
 
 Notes:
 
 - Management APIs use JWT access tokens.
-- Gateway chat APIs use platform API keys created by `POST /api/api-keys`.
-- `/api/chat/**` remains available as an internal compatibility alias, while `/v1/chat/**` is the OpenAI-compatible public path.
-- OpenRouter uses the OpenAI-compatible adapter with `OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`.
-- Configure the upstream key with `OPENROUTER_API_KEY`; do not store raw keys in source code.
-- Provider failures are returned as unified errors such as `PROVIDER_TIMEOUT`, `PROVIDER_RATE_LIMITED`, `PROVIDER_AUTH_FAILED`, or `PROVIDER_UPSTREAM_ERROR`.
-- `request_log` records `providerId`, `modelId`, `apiKeyId`, `statusCode`, `latencyMs`, and `errorCode`; it does not record Authorization headers or provider keys.
+- Gateway APIs use platform API keys created by `POST /api/api-keys`.
+- Requests are rejected before upstream calls when the wallet is missing or has no positive balance.
+- Final successful non-streaming billing writes `request_log`, `usage_record`, `wallet_transaction`, and the idempotency result in one transaction.
+- Final balance deduction uses the model's `pricing_rule` prices and locks the wallet row with `FOR UPDATE`.
+- Streaming currently performs auth, rate limiting, and request logging, but does not yet persist token usage or deduct post-stream usage.

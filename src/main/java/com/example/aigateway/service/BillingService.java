@@ -5,6 +5,7 @@ import com.example.aigateway.entity.UsageRecord;
 import com.example.aigateway.entity.Wallet;
 import com.example.aigateway.entity.WalletTransaction;
 import com.example.aigateway.exception.BusinessException;
+import com.example.aigateway.mapper.IdempotencyRecordMapper;
 import com.example.aigateway.mapper.RequestLogMapper;
 import com.example.aigateway.mapper.UsageRecordMapper;
 import com.example.aigateway.mapper.WalletMapper;
@@ -18,24 +19,30 @@ import org.springframework.transaction.annotation.Transactional;
 public class BillingService {
     private static final String TRANSACTION_TYPE_USAGE_DEDUCT = "USAGE_DEDUCT";
     private static final String TRANSACTION_TYPE_PRE_DEDUCT = "PRE_DEDUCT";
+    private static final String IDEMPOTENCY_STATUS_COMPLETED = "COMPLETED";
+    private static final String IDEMPOTENCY_STATUS_FAILED = "FAILED";
 
     private final WalletMapper walletMapper;
     private final UsageRecordMapper usageRecordMapper;
     private final WalletTransactionMapper walletTransactionMapper;
     private final RequestLogMapper requestLogMapper;
+    private final IdempotencyRecordMapper idempotencyRecordMapper;
 
     public BillingService(WalletMapper walletMapper,
                           UsageRecordMapper usageRecordMapper,
                           WalletTransactionMapper walletTransactionMapper,
-                          RequestLogMapper requestLogMapper) {
+                          RequestLogMapper requestLogMapper,
+                          IdempotencyRecordMapper idempotencyRecordMapper) {
         this.walletMapper = walletMapper;
         this.usageRecordMapper = usageRecordMapper;
         this.walletTransactionMapper = walletTransactionMapper;
         this.requestLogMapper = requestLogMapper;
+        this.idempotencyRecordMapper = idempotencyRecordMapper;
     }
 
     @Transactional
-    public void recordSuccessfulUsage(RequestLog successLog, UsageRecord usageRecord) {
+    public void recordSuccessfulUsage(RequestLog successLog, UsageRecord usageRecord, Long idempotencyRecordId,
+            String idempotencyResponseJson) {
         BigDecimal costAmount = requireValidCost(usageRecord.getCostAmount());
         Wallet wallet = lockWallet(usageRecord.getUserId());
         BigDecimal balanceAfter = deduct(wallet, costAmount);
@@ -49,11 +56,33 @@ public class BillingService {
                 balanceAfter,
                 usageRecord.getRequestId()
         ));
+        if (idempotencyRecordId != null) {
+            idempotencyRecordMapper.updateIdempotencyRecordResult(
+                    idempotencyRecordId, IDEMPOTENCY_STATUS_COMPLETED, idempotencyResponseJson, null);
+        }
     }
 
     @Transactional
-    public void recordFailedRequestWithoutCharge(RequestLog failedLog) {
+    public void recordFailedRequestWithoutCharge(RequestLog failedLog, Long idempotencyRecordId, String errorCode) {
         requestLogMapper.insertRequestLog(failedLog);
+        if (idempotencyRecordId != null) {
+            idempotencyRecordMapper.updateIdempotencyRecordResult(
+                    idempotencyRecordId, IDEMPOTENCY_STATUS_FAILED, null, errorCode);
+        }
+    }
+
+    public void ensureWalletCanStartCall(Long userId) {
+        if (userId == null) {
+            throw new BusinessException("USER_ID_REQUIRED", "User id is required for billing");
+        }
+
+        Wallet wallet = walletMapper.getWalletByUserId(userId);
+        if (wallet == null) {
+            throw new BusinessException("WALLET_NOT_FOUND", "Wallet not found for user: " + userId, HttpStatus.NOT_FOUND);
+        }
+        if (wallet.getBalance().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("INSUFFICIENT_BALANCE", "Wallet balance is not enough", HttpStatus.CONFLICT);
+        }
     }
 
     @Transactional

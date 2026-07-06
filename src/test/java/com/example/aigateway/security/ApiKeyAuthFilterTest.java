@@ -64,6 +64,33 @@ class ApiKeyAuthFilterTest {
         verify(apiKeyService).authenticateRawApiKey("ak_test_secret");
     }
 
+    @Test
+    void v1MessagesRequestWithXApiKeyShouldAuthenticatePrincipal() throws Exception {
+        ApiKeyService apiKeyService = org.mockito.Mockito.mock(ApiKeyService.class);
+        ApiKey apiKey = new ApiKey();
+        apiKey.setId(11L);
+        apiKey.setUserId(21L);
+        apiKey.setPrefix("ak_x");
+        when(apiKeyService.authenticateRawApiKey("ak_x_secret")).thenReturn(apiKey);
+
+        ApiKeyAuthFilter filter = new ApiKeyAuthFilter(apiKeyService, objectMapper());
+        MockHttpServletRequest request = request("/v1/messages");
+        request.addHeader("x-api-key", "ak_x_secret");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, (servletRequest, servletResponse) -> {
+            var authentication = SecurityContextHolder.getContext().getAuthentication();
+            assertInstanceOf(UsernamePasswordAuthenticationToken.class, authentication);
+            assertInstanceOf(ApiKeyPrincipal.class, authentication.getPrincipal());
+            ApiKeyPrincipal principal = (ApiKeyPrincipal) authentication.getPrincipal();
+            assertEquals(11L, principal.getApiKeyId());
+            assertEquals(21L, principal.getUserId());
+        });
+
+        assertEquals(200, response.getStatus());
+        verify(apiKeyService).authenticateRawApiKey("ak_x_secret");
+    }
+
     private MockHttpServletRequest request(String path) {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", path);
         request.setServletPath(path);
