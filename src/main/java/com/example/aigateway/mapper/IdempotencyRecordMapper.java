@@ -8,14 +8,14 @@ public interface IdempotencyRecordMapper {
 
     int insertIdempotencyRecordIgnore(IdempotencyRecord idempotencyRecord);
 
-    IdempotencyRecord getByApiKeyIdAndIdempotencyKey(
-            @Param("apiKeyId") Long apiKeyId,
-            @Param("idempotencyKey") String idempotencyKey
+    IdempotencyRecord getByScopeAndIdempotencyKeyHash(
+            @Param("scope") String scope,
+            @Param("idempotencyKeyHash") String idempotencyKeyHash
     );
 
-    IdempotencyRecord getByApiKeyIdAndIdempotencyKeyForUpdate(
-            @Param("apiKeyId") Long apiKeyId,
-            @Param("idempotencyKey") String idempotencyKey
+    IdempotencyRecord getByScopeAndIdempotencyKeyHashForUpdate(
+            @Param("scope") String scope,
+            @Param("idempotencyKeyHash") String idempotencyKeyHash
     );
 
     IdempotencyRecord getByRequestId(@Param("requestId") String requestId);

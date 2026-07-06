@@ -85,11 +85,15 @@ public class ModelCallService {
         ProviderModelPricing model = null;
         IdempotencyRecord idempotencyRecord = null;
         if (hasText(idempotencyKey)) {
-            String requestHash = sha256Hex(hasText(idempotencyPayload) ? idempotencyPayload : writeJson(request));
-            idempotencyRecord = toIdempotencyRecord(requestId, principal, idempotencyKey, requestHash);
+            String scope = idempotencyScope(principal);
+            String payload = hasText(idempotencyPayload) ? idempotencyPayload : writeJson(request);
+            String idempotencyKeyHash = sha256Hex(idempotencyKey.trim());
+            String requestFingerprint = buildRequestFingerprint("POST", "model_call", scope, payload);
+            idempotencyRecord = toIdempotencyRecord(
+                    requestId, principal, scope, idempotencyKeyHash, requestFingerprint);
             IdempotencyRecord existingRecord = checkRequest(idempotencyRecord);
             if (!requestId.equals(existingRecord.getRequestId())) {
-                return replayIdempotentResponse(existingRecord, requestHash);
+                return replayIdempotentResponse(existingRecord, requestFingerprint);
             }
         }
 
@@ -282,12 +286,19 @@ public class ModelCallService {
     }
 
     private IdempotencyRecord toIdempotencyRecord(
-            String requestId, 
-            ApiKeyPrincipal principal, 
-            String idempotencyKey,
-            String requestHash) {
+            String requestId,
+            ApiKeyPrincipal principal,
+            String scope,
+            String idempotencyKeyHash,
+            String requestFingerprint) {
         Date expiresAt = new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000L);
-        return new IdempotencyRecord(principal.getApiKeyId(), idempotencyKey.trim(), requestHash, requestId, STATUS_PENDING,
+        return new IdempotencyRecord(
+                scope,
+                principal.getApiKeyId(),
+                idempotencyKeyHash,
+                requestFingerprint,
+                requestId,
+                STATUS_PENDING,
                 expiresAt);
     }
 
@@ -297,8 +308,8 @@ public class ModelCallService {
         if (inserted == 1) {
             return record;
         }
-        IdempotencyRecord existingRecord = idempotencyRecordMapper.getByApiKeyIdAndIdempotencyKey(
-                record.getApiKeyId(), record.getIdempotencyKey());
+        IdempotencyRecord existingRecord = idempotencyRecordMapper.getByScopeAndIdempotencyKeyHash(
+                record.getScope(), record.getIdempotencyKeyHash());
         if (existingRecord == null) {
             throw new BusinessException(
                     "IDEMPOTENCY_LOOKUP_FAILED",
@@ -308,8 +319,8 @@ public class ModelCallService {
         return existingRecord;
     }
 
-    private ChatResponse replayIdempotentResponse(IdempotencyRecord existingRecord, String requestHash) {
-        if (!existingRecord.getRequestHash().equals(requestHash)) {
+    private ChatResponse replayIdempotentResponse(IdempotencyRecord existingRecord, String requestFingerprint) {
+        if (!existingRecord.getRequestFingerprint().equals(requestFingerprint)) {
             throw new BusinessException(
                     "IDEMPOTENCY_KEY_REUSED",
                     "Idempotency-Key was already used with a different request payload",
@@ -356,8 +367,16 @@ public class ModelCallService {
         }
     }
 
+    private String buildRequestFingerprint(String method, String route, String scope, String payload) {
+        return sha256Hex(method.toUpperCase() + "\n" + route + "\n" + scope + "\n" + payload);
+    }
+
     private Long idempotencyId(IdempotencyRecord record) {
         return record == null ? null : record.getId();
+    }
+
+    private String idempotencyScope(ApiKeyPrincipal principal) {
+        return "api_key:" + principal.getApiKeyId();
     }
 
     private boolean hasText(String value) {

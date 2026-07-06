@@ -4,9 +4,10 @@ import java.util.Date;
 
 public class IdempotencyRecord {
     private Long id;
+    private String scope;
     private Long apiKeyId;
-    private String idempotencyKey;
-    private String requestHash;
+    private String idempotencyKeyHash;
+    private String requestFingerprint;
     private String requestId;
     private String status;
     private String responseJson;
@@ -18,11 +19,12 @@ public class IdempotencyRecord {
     public IdempotencyRecord() {
     }
 
-    public IdempotencyRecord(Long apiKeyId, String idempotencyKey, String requestHash,
+    public IdempotencyRecord(String scope, Long apiKeyId, String idempotencyKeyHash, String requestFingerprint,
                              String requestId, String status, Date expiresAt) {
+        this.scope = scope;
         this.apiKeyId = apiKeyId;
-        this.idempotencyKey = idempotencyKey;
-        this.requestHash = requestHash;
+        this.idempotencyKeyHash = idempotencyKeyHash;
+        this.requestFingerprint = requestFingerprint;
         this.requestId = requestId;
         this.status = status;
         this.expiresAt = expiresAt;
@@ -36,6 +38,14 @@ public class IdempotencyRecord {
         this.id = id;
     }
 
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
+    }
+
     public Long getApiKeyId() {
         return apiKeyId;
     }
@@ -44,20 +54,20 @@ public class IdempotencyRecord {
         this.apiKeyId = apiKeyId;
     }
 
-    public String getIdempotencyKey() {
-        return idempotencyKey;
+    public String getIdempotencyKeyHash() {
+        return idempotencyKeyHash;
     }
 
-    public void setIdempotencyKey(String idempotencyKey) {
-        this.idempotencyKey = idempotencyKey;
+    public void setIdempotencyKeyHash(String idempotencyKeyHash) {
+        this.idempotencyKeyHash = idempotencyKeyHash;
     }
 
-    public String getRequestHash() {
-        return requestHash;
+    public String getRequestFingerprint() {
+        return requestFingerprint;
     }
 
-    public void setRequestHash(String requestHash) {
-        this.requestHash = requestHash;
+    public void setRequestFingerprint(String requestFingerprint) {
+        this.requestFingerprint = requestFingerprint;
     }
 
     public String getRequestId() {

@@ -128,9 +128,10 @@ CREATE TABLE IF NOT EXISTS request_log (
 
 CREATE TABLE IF NOT EXISTS idempotency_record (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    scope VARCHAR(128) NOT NULL,
     api_key_id BIGINT NOT NULL,
-    idempotency_key VARCHAR(128) NOT NULL,
-    request_hash CHAR(64) NOT NULL,
+    idempotency_key_hash CHAR(64) NOT NULL,
+    request_fingerprint CHAR(64) NOT NULL,
     request_id VARCHAR(64) NOT NULL,
     status VARCHAR(16) NOT NULL,
     response_json JSON NULL,
@@ -138,9 +139,11 @@ CREATE TABLE IF NOT EXISTS idempotency_record (
     expires_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_idempotency_api_key_key (api_key_id, idempotency_key),
+    UNIQUE KEY uk_idempotency_scope_key (scope, idempotency_key_hash),
     UNIQUE KEY uk_idempotency_request_id (request_id),
+    KEY idx_idempotency_api_key_id (api_key_id),
     KEY idx_idempotency_expires_at (expires_at),
+    KEY idx_idempotency_status_updated (status, updated_at),
     CONSTRAINT fk_idempotency_api_key FOREIGN KEY (api_key_id) REFERENCES api_key (id)
 );
 
@@ -158,4 +161,15 @@ CREATE TABLE IF NOT EXISTS usage_record (
     KEY idx_usage_record_user_created (user_id, created_at),
     CONSTRAINT fk_usage_record_user FOREIGN KEY (user_id) REFERENCES user_account (id),
     CONSTRAINT fk_usage_record_model FOREIGN KEY (model_id) REFERENCES model (id)
+);
+
+CREATE TABLE IF NOT EXISTS usage_billing_dedup (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    request_id VARCHAR(64) NOT NULL,
+    api_key_id BIGINT NOT NULL,
+    request_fingerprint CHAR(64) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_usage_billing_request_api_key (request_id, api_key_id),
+    KEY idx_usage_billing_api_key_created (api_key_id, created_at),
+    CONSTRAINT fk_usage_billing_api_key FOREIGN KEY (api_key_id) REFERENCES api_key (id)
 );
