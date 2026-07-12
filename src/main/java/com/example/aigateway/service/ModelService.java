@@ -9,6 +9,7 @@ import com.example.aigateway.dto.ProviderModelPricing;
 import com.example.aigateway.exception.BusinessException;
 import com.example.aigateway.mapper.ModelMapper;
 
+/** Resolves enabled models together with their active pricing rules. */
 @Service
 public class ModelService {
     private final ModelMapper modelMapper;

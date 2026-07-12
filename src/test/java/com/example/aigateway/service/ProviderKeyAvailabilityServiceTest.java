@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 
+/** Verifies provider key availability service behavior. */
 class ProviderKeyAvailabilityServiceTest {
 
     @Test

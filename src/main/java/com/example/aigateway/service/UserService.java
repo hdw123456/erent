@@ -16,6 +16,7 @@ import java.util.List;
 
 import java.math.BigDecimal;
 
+/** Registers users and exposes account profile data. */
 @Service
 public class UserService {
     private final WalletMapper walletMapper;

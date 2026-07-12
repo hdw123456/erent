@@ -2,13 +2,15 @@
 
 AI API 聚合网关与用量计费平台学习项目。
 
-当前目标是配合第三、四阶段学习路线，先完成一个单体后端闭环：
+当前实现是一个单体后端闭环：
 
 - 用户注册、登录
 - 平台 API Key 管理
 - Provider Key 加密存储
-- 统一模型调用接口
-- 请求日志、用量记录、余额扣费
+- OpenAI Chat Completions、Anthropic Messages、OpenAI Responses 兼容接口
+- HTTP SSE 与 Responses WebSocket 流式调用
+- Provider Key 调度、调用前 failover 和健康状态
+- 请求日志、流式用量、幂等计费、并发余额扣减
 - Redis 限流
 - MyBatis 持久化
 - 单元测试、Web 测试、Mapper 集成测试
@@ -29,6 +31,8 @@ AI API 聚合网关与用量计费平台学习项目。
 
 ```text
 ai-gateway/
+  ARCHITECTURE.md
+  CODEBASE.md
   docs/
     requirements.md
     database.md
@@ -45,13 +49,12 @@ ai-gateway/
     dto/
     entity/
     exception/
+    gateway/
     mapper/
     security/
     service/
     provider/
-    billing/
     ratelimit/
-    audit/
     client/
   src/main/resources/
     application.yml
@@ -63,7 +66,13 @@ ai-gateway/
 
 ## 本地运行
 
-先准备 MySQL 和 Redis，然后设置环境变量：
+可以用 Docker Compose 启动 MySQL 和 Redis：
+
+```powershell
+docker compose up -d
+```
+
+也可以自行准备服务，然后设置环境变量：
 
 ```powershell
 $env:DB_HOST="localhost"
@@ -86,4 +95,3 @@ mvn spring-boot:run
 ```powershell
 curl.exe http://localhost:8080/api/health
 ```
-

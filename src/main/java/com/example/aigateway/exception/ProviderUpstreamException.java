@@ -3,6 +3,7 @@ package com.example.aigateway.exception;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 
+/** Retains upstream status, headers, and body for availability decisions. */
 public class ProviderUpstreamException extends BusinessException {
     private final int upstreamStatus;
     private final HttpHeaders headers;

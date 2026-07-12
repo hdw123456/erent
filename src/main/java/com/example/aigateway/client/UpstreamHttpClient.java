@@ -12,6 +12,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/** Executes timeout-bound JSON and SSE requests against model providers. */
 @Service
 public class UpstreamHttpClient {
     private final WebClient webClient;
@@ -48,6 +49,7 @@ public class UpstreamHttpClient {
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
                 })
                 .map(ServerSentEvent::data)
-                .filter(data -> data != null && !data.isBlank());
+                .filter(data -> data != null && !data.isBlank())
+                .timeout(requestTimeout);
     }
 }

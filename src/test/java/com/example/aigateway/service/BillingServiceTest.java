@@ -24,6 +24,7 @@ import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+/** Verifies billing service behavior. */
 class BillingServiceTest {
 
     @Test
@@ -86,6 +87,29 @@ class BillingServiceTest {
                 fixture.usageRecordMapper,
                 fixture.walletTransactionMapper,
                 fixture.idempotencyRecordMapper);
+    }
+
+    @Test
+    void recordPartialUsageShouldChargeAndLeaveIdempotencyFailed() {
+        Fixture fixture = new Fixture();
+        when(fixture.usageBillingDedupMapper.insertUsageBillingDedupIgnore(any())).thenReturn(1);
+        when(fixture.walletMapper.getWalletByUserIdForUpdate(100L)).thenReturn(wallet());
+
+        fixture.service.recordPartialUsage(
+                requestLog(),
+                usageRecord(),
+                99L,
+                "fingerprint-a",
+                "PROVIDER_UPSTREAM_ERROR");
+
+        verify(fixture.walletMapper).updateBalance(100L, new BigDecimal("9.25"));
+        verify(fixture.requestLogMapper).insertRequestLog(any(RequestLog.class));
+        verify(fixture.usageRecordMapper).insertUsageRecord(any(UsageRecord.class));
+        verify(fixture.idempotencyRecordMapper).updateIdempotencyRecordResult(
+                99L,
+                "FAILED",
+                null,
+                "PROVIDER_UPSTREAM_ERROR");
     }
 
     private RequestLog requestLog() {

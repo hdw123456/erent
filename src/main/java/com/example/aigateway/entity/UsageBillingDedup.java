@@ -2,6 +2,7 @@ package com.example.aigateway.entity;
 
 import java.util.Date;
 
+/** Persistence model for usage billing dedup data. */
 public class UsageBillingDedup {
     private Long id;
     private String requestId;

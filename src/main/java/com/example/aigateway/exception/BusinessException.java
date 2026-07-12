@@ -2,6 +2,7 @@ package com.example.aigateway.exception;
 
 import org.springframework.http.HttpStatus;
 
+/** Domain exception carrying a stable API error code and HTTP status. */
 public class BusinessException extends RuntimeException {
 
     private final String code;

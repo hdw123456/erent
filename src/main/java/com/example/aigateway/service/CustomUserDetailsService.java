@@ -11,6 +11,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+/** Loads user credentials and roles for Spring Security. */
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
     private final UserService userService;

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 
+/** Verifies model call service fingerprint behavior. */
 class ModelCallServiceFingerprintTest {
 
     @Test

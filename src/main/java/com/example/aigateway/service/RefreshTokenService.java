@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/** Validates refresh tokens and issues replacement access tokens. */
 @Service
 public class RefreshTokenService {
 

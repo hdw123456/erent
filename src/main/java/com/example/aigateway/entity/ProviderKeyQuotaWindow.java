@@ -3,6 +3,7 @@ package com.example.aigateway.entity;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/** Persistence model for provider key quota window data. */
 public class ProviderKeyQuotaWindow {
     private Long id;
     private Long providerKeyId;

@@ -8,6 +8,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
+/** Atomically enforces a Redis-backed fixed request window. */
 @Service
 public class FixedWindowRateLimiter {
     private static final Logger logger = LoggerFactory.getLogger(FixedWindowRateLimiter.class);
@@ -32,6 +33,7 @@ public class FixedWindowRateLimiter {
         this.script = new DefaultRedisScript<>(SCRIPT, Long.class);
     }
 
+    /** Increments one window key and returns whether its configured limit was exceeded. */
     public RateLimitDecision check(
             String dimension,
             String identifier,

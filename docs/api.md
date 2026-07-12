@@ -550,7 +550,15 @@ POST /backend-api/codex/responses
 
 `/v1/responses` accepts OpenAI Responses-style bodies and maps `instructions`, `input`, `max_output_tokens`, and `stream` into the internal request model.
 
-Non-streaming gateway requests may include `Idempotency-Key`. If present, the same API key + same idempotency key + same raw protocol payload replays the same stored result and will not charge twice. If absent, the request is processed normally without strict retry de-duplication.
+Gateway requests, including streaming requests, may include `Idempotency-Key`. If present, the same API key + same idempotency key + same raw protocol payload replays the stored JSON response or exact SSE frames and will not call the provider or charge twice. If absent, the request is processed normally without strict retry de-duplication.
+
+Streaming responses are formatted for the requested public protocol:
+
+- Chat Completions uses data-only JSON chunks followed by `[DONE]`.
+- Anthropic Messages uses `message_start`, content-block, message-delta, and `message_stop` events.
+- Responses uses typed events such as `response.created`, `response.output_text.delta`, and `response.completed`.
+
+The Responses paths also accept an authenticated WebSocket upgrade. Send one `response.create` JSON event at a time; subsequent turns on the same connection may use the previous `response_id` as `previous_response_id`. A failed turn invalidates that connection-local history, and closing the connection cancels any in-flight provider stream.
 
 ### OpenAI Chat Completions example
 
@@ -598,6 +606,8 @@ Notes:
 - Management APIs use JWT access tokens.
 - Gateway APIs use platform API keys created by `POST /api/api-keys`.
 - Requests are rejected before upstream calls when the wallet is missing or has no positive balance.
-- Final successful non-streaming billing writes `request_log`, `usage_record`, `wallet_transaction`, and the idempotency result in one transaction.
+- Final successful billing writes `request_log`, `usage_record`, `wallet_transaction`, and the idempotency result in one transaction for both non-streaming and streaming calls.
 - Final balance deduction uses the model's `pricing_rule` prices and locks the wallet row with `FOR UPDATE`.
-- Streaming currently performs auth, rate limiting, and request logging, but does not yet persist token usage or deduct post-stream usage.
+- Streaming asks OpenAI-compatible providers for a terminal usage chunk. If usage is unavailable, the gateway stores an explicit `ESTIMATED` fallback in `usage_record.usage_source`.
+- A stream that fails after provider output began records and charges partial usage; a failure before the first provider event is not charged.
+- Stream failover is allowed only before the first provider event, so output from different provider keys is never spliced together.

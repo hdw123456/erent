@@ -2,6 +2,7 @@ package com.example.aigateway.entity;
 
 import java.util.Date;
 
+/** Persistence model for user account data. */
 public class UserAccount {
     private Long id;
     private String username;

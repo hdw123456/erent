@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
+/** Validated request data for user register operations. */
 public class UserRegister {
 
     @NotBlank

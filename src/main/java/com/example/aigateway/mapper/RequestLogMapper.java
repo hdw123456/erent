@@ -7,6 +7,7 @@ import java.util.Date;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
+/** MyBatis persistence operations for request log data. */
 public interface RequestLogMapper {
     void insertRequestLog(RequestLog requestLog);
     RequestLog getRequestLogByRequestId(@Param("requestId") String requestId);

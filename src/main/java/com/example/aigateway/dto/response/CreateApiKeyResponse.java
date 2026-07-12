@@ -1,5 +1,6 @@
 package com.example.aigateway.dto.response;
 
+/** Serialized response data for create api key operations. */
 public class CreateApiKeyResponse {
     private Long id;
     private String name;

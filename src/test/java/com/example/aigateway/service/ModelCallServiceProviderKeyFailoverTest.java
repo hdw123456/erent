@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 
+/** Verifies model call service provider key failover behavior. */
 class ModelCallServiceProviderKeyFailoverTest {
 
     @Test

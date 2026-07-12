@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
 import java.util.List;
 
+/** Anthropic payload model for claude request. */
 public class ClaudeRequest {
     private String model;
     private List<Message> messages;

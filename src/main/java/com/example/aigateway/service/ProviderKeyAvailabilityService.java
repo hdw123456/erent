@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 
+/** Translates upstream outcomes into provider-key health and cooldown state. */
 @Service
 public class ProviderKeyAvailabilityService {
     private static final Logger logger = LoggerFactory.getLogger(ProviderKeyAvailabilityService.class);
@@ -48,6 +49,7 @@ public class ProviderKeyAvailabilityService {
         runStateUpdate(providerKeyId, () -> providerKeyMapper.markSuccess(providerKeyId));
     }
 
+    /** Maps an upstream failure to permanent error state or a bounded cooldown. */
     public void markFailure(Long providerKeyId, BusinessException exception, Throwable throwable) {
         if (providerKeyId == null || exception == null) {
             return;
@@ -88,6 +90,7 @@ public class ProviderKeyAvailabilityService {
         return status == 502 || status == 503 || status == 504 || status == 529;
     }
 
+    /** Chooses the latest future reset advertised across supported provider headers. */
     private Optional<LocalDateTime> resolveRateLimitResetAt(ProviderUpstreamException upstreamException) {
         if (upstreamException == null) {
             return Optional.empty();

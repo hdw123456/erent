@@ -5,11 +5,13 @@ import com.example.aigateway.dto.response.ChatResponse;
 import com.example.aigateway.exception.BusinessException;
 import com.example.aigateway.provider.ProviderAdapter;
 import com.example.aigateway.provider.ProviderCredential;
+import com.example.aigateway.provider.ProviderStreamEvent;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
+/** Placeholder adapter boundary for native Gemini integration. */
 @Component
 public class GeminiAdapter implements ProviderAdapter {
     @Override
@@ -23,7 +25,7 @@ public class GeminiAdapter implements ProviderAdapter {
     }
 
     @Override
-    public Flux<String> stream(ChatRequest request, ProviderCredential credential) {
+    public Flux<ProviderStreamEvent> stream(ChatRequest request, ProviderCredential credential) {
         return Flux.error(notImplemented());
     }
 

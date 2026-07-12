@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
+/** MyBatis persistence operations for provider key data. */
 public interface ProviderKeyMapper {
     void insertProviderKey(ProviderKey providerKey);
     void updateProviderKey(ProviderKey providerKey);

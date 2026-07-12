@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 
+/** Decrypted, call-scoped upstream credential and endpoint settings. */
 public class ProviderCredential {
     private Long providerKeyId;
     private String providerKeyType;

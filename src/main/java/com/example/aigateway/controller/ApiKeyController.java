@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 
+/** Manages platform API keys owned by the current user. */
 @RestController
 @RequestMapping("/api/api-keys")
 public class ApiKeyController {

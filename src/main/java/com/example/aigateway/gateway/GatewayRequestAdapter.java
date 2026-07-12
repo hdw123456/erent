@@ -12,6 +12,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
+/** Normalizes OpenAI, Anthropic, and Responses request bodies. */
 @Component
 public class GatewayRequestAdapter {
     private final ObjectMapper objectMapper;
@@ -20,6 +21,7 @@ public class GatewayRequestAdapter {
         this.objectMapper = objectMapper;
     }
 
+    /** Preserves the OpenAI payload while extracting fields required for routing and billing. */
     public ChatRequest fromChatCompletions(String rawBody) {
         JsonNode root = readObject(rawBody);
         ChatRequest request = baseRequest(root);
@@ -30,6 +32,7 @@ public class GatewayRequestAdapter {
         return request;
     }
 
+    /** Converts Anthropic system and message content into the internal chat model. */
     public ChatRequest fromAnthropicMessages(String rawBody) {
         JsonNode root = readObject(rawBody);
         ChatRequest request = baseRequest(root);
@@ -53,6 +56,7 @@ public class GatewayRequestAdapter {
         return request;
     }
 
+    /** Converts Responses instructions and input items into the internal chat model. */
     public ChatRequest fromResponses(String rawBody) {
         JsonNode root = readObject(rawBody);
         ChatRequest request = baseRequest(root);

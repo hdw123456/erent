@@ -7,6 +7,8 @@ import com.example.aigateway.exception.BusinessException;
 import com.example.aigateway.exception.ProviderUpstreamException;
 import com.example.aigateway.provider.ProviderAdapter;
 import com.example.aigateway.provider.ProviderCredential;
+import com.example.aigateway.provider.ProviderStreamEvent;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,15 +17,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import reactor.core.publisher.Flux;
 
+/** Calls OpenAI-compatible chat-completions providers. */
 @Component
 public class OpenAiAdapter implements ProviderAdapter {
     private final UpstreamHttpClient upstreamHttpClient;
+    private final OpenAiStreamEventParser streamEventParser;
 
-    public OpenAiAdapter(UpstreamHttpClient upstreamHttpClient) {
+    public OpenAiAdapter(
+            UpstreamHttpClient upstreamHttpClient,
+            OpenAiStreamEventParser streamEventParser) {
         this.upstreamHttpClient = upstreamHttpClient;
+        this.streamEventParser = streamEventParser;
     }
 
     @Override
@@ -60,19 +66,20 @@ public class OpenAiAdapter implements ProviderAdapter {
     }
 
     @Override
-    public Flux<String> stream(ChatRequest request, ProviderCredential credential) {
+    public Flux<ProviderStreamEvent> stream(ChatRequest request, ProviderCredential credential) {
         Object upstreamRequest = upstreamRequest(request, true);
         return upstreamHttpClient.postJsonStream(
                 chatCompletionsUrl(credential),
                 upstreamRequest,
                 authorizationHeaders(credential)
-        );
+        ).map(streamEventParser::parse);
     }
 
     private Object upstreamRequest(ChatRequest request, boolean stream) {
         if (request.getOpenAiPayload() == null) {
             OpenaiRequest upstreamRequest = OpenaiRequest.from(request);
             upstreamRequest.setStream(stream);
+            upstreamRequest.setStreamOptions(stream ? OpenaiRequest.StreamOptions.includeUsage() : null);
             return upstreamRequest;
         }
 
@@ -83,6 +90,17 @@ public class OpenAiAdapter implements ProviderAdapter {
         }
         payload.remove("maxTokens");
         payload.put("stream", stream);
+        if (stream) {
+            ObjectNode streamOptions;
+            if (payload.path("stream_options").isObject()) {
+                streamOptions = (ObjectNode) payload.path("stream_options");
+            } else {
+                streamOptions = payload.putObject("stream_options");
+            }
+            streamOptions.put("include_usage", true);
+        } else {
+            payload.remove("stream_options");
+        }
         return payload;
     }
 

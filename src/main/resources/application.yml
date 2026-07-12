@@ -1,12 +1,14 @@
 spring:
   application:
     name: ai-gateway
+  # MySQL stores identity, provider scheduling, usage, and wallet state.
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:ai_gateway}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
+    # Redis is used only for the request-rate fixed window.
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
@@ -25,6 +27,7 @@ server:
   port: ${SERVER_PORT:8080}
 
 gateway:
+  # Limits are evaluated independently for API key, user, and source IP.
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     fail-open: ${RATE_LIMIT_FAIL_OPEN:true}
@@ -38,6 +41,7 @@ gateway:
     response-timeout-ms: ${UPSTREAM_RESPONSE_TIMEOUT_MS:65000}
     request-timeout-ms: ${UPSTREAM_REQUEST_TIMEOUT_MS:70000}
   provider-key:
+    # Maximum candidate credentials tried before the call fails.
     max-failover-attempts: ${PROVIDER_KEY_MAX_FAILOVER_ATTEMPTS:3}
 
 logging:
@@ -48,6 +52,7 @@ logging:
 
 jasypt:
   encryptor:
+    # JASYPT_PASSWORD must be supplied outside local development.
     password: ${JASYPT_PASSWORD}
     algorithm: PBEWITHHMACSHA512ANDAES_256
 

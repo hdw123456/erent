@@ -12,6 +12,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+/** Queries request logs and maps persistence rows to API responses. */
 @Service
 public class RequestLogService {
     private static final int DEFAULT_PAGE = 1;

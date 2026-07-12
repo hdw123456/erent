@@ -2,6 +2,7 @@ package com.example.aigateway.dto.request;
 
 import jakarta.validation.constraints.Size;
 
+/** Validated request data for update provider key operations. */
 public class UpdateProviderKeyRequest {
     @Size(max = 2048)
     private String rawProviderKey;

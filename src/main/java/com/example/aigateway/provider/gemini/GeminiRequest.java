@@ -4,6 +4,7 @@ import com.example.aigateway.dto.request.ChatRequest;
 import java.util.ArrayList;
 import java.util.List;
 
+/** Gemini payload model for gemini request. */
 public class GeminiRequest {
     private List<Content> contents;
 

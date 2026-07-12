@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
+/** MyBatis persistence operations for wallet data. */
 public interface WalletMapper {
     void insertWallet(Wallet wallet);
     Wallet getWalletByUserId(@Param("userId") long userId);

@@ -1,5 +1,7 @@
 # Requirements
 
+> This file records the original V1 learning baseline. Current implemented capabilities and boundaries are documented in `ARCHITECTURE.md`, `CODEBASE.md`, and `docs/api.md`.
+
 ## V1 Scope
 
 - Users can register and log in.
@@ -17,4 +19,3 @@
 - Multiple backend services.
 - Real payment integration.
 - Complex frontend dashboard.
-

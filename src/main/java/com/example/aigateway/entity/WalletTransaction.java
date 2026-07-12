@@ -3,6 +3,7 @@ package com.example.aigateway.entity;
 import java.math.BigDecimal;
 import java.util.Date;
 
+/** Persistence model for wallet transaction data. */
 public class WalletTransaction {
     private Long id;
     private Long walletId;

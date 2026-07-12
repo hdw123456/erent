@@ -1,5 +1,6 @@
 package com.example.aigateway.dto.response;
 
+/** Serialized response data for chat operations. */
 public class ChatResponse {
     private String requestId;
     private String id;

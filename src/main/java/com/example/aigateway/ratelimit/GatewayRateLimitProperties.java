@@ -3,6 +3,7 @@ package com.example.aigateway.ratelimit;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+/** Binds gateway rate-limit configuration. */
 @Component
 @ConfigurationProperties(prefix = "gateway.rate-limit")
 public class GatewayRateLimitProperties {

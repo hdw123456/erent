@@ -18,6 +18,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+/** Authenticates gateway requests from platform API key headers. */
 @Component
 public class ApiKeyAuthFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";

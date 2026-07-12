@@ -7,6 +7,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
+/** Creates and verifies non-reversible API key hashes. */
 @Component
 public class ApiKeyHasher {
 

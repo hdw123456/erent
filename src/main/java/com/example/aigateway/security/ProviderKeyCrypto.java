@@ -3,6 +3,7 @@ package com.example.aigateway.security;
 import org.jasypt.encryption.StringEncryptor;
 import org.springframework.stereotype.Component;
 
+/** Encrypts provider credentials at rest and decrypts them for calls. */
 @Component
 public class ProviderKeyCrypto {
     private final StringEncryptor stringEncryptor;

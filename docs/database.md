@@ -13,13 +13,16 @@ erDiagram
     wallet ||--o{ wallet_transaction : records
     provider ||--o{ provider_key : has
     user_account ||--o{ provider_key : may_own
+    provider_key ||--o{ provider_key_quota_window : limited_by
     provider ||--o{ model : provides
     model ||--o{ pricing_rule : priced_by
     user_account ||--o{ request_log : sends
     api_key ||--o{ request_log : authenticates
     provider ||--o{ request_log : handles
+    provider_key ||--o{ request_log : dispatched_to
     model ||--o{ request_log : used_by
     user_account ||--o{ usage_record : consumes
+    provider_key ||--o{ usage_record : attributed_to
     model ||--o{ usage_record : counted_by
 ```
 
@@ -134,9 +137,23 @@ erDiagram
 | `id` | Provider Key 主键 |
 | `provider_id` | 所属 Provider |
 | `user_id` | 所属用户，为空表示平台级 Key |
+| `provider_key_type` | `OFFICIAL_API_KEY`、订阅反代或第三方中转等类型 |
+| `base_url` | 该 Key 独立的上游地址，为空时使用 Provider 默认地址 |
 | `encrypted_key` | 加密后的 Provider Key |
 | `key_hint` | Key 提示信息，例如尾号或备注 |
 | `enabled` | 是否启用 |
+| `status` | `ACTIVE` 或需要人工处理的 `ERROR` |
+| `schedulable` | 是否参与自动调度 |
+| `priority` | 调度优先级，数值越小越优先 |
+| `rate_limited_until` | 429 冷却截止时间 |
+| `overloaded_until` | 上游过载冷却截止时间 |
+| `temp_disabled_until` | 超时/网络异常临时禁用截止时间 |
+| `expires_at` | 凭证过期时间 |
+| `last_error_code` | 最近错误编码 |
+| `last_error_message` | 最近错误摘要 |
+| `last_used_at` | 最近尝试调用时间 |
+| `last_success_at` | 最近成功时间 |
+| `last_failed_at` | 最近失败时间 |
 | `created_at` | 创建时间 |
 | `updated_at` | 更新时间 |
 
@@ -145,6 +162,22 @@ erDiagram
 - `provider_id` 外键引用 `provider(id)`。
 - `user_id` 可以为空。为空表示平台统一配置的 Provider Key。
 - `encrypted_key` 必须加密存储，不能保存明文。
+
+### provider_key_quota_window
+
+Provider Key 的多周期额度窗口。一个 Key 可以同时存在 5 小时、周额度或其他 Provider 自定义窗口。
+
+| 字段 | 含义 |
+| --- | --- |
+| `provider_key_id` | 所属 Provider Key |
+| `window_type` | 窗口类型，例如 `FIVE_HOUR`、`WEEKLY` |
+| `quota_limit` | 当前周期总额度 |
+| `quota_used` | 当前周期已用额度 |
+| `window_start_at` | 周期开始时间 |
+| `reset_at` | 周期重置时间 |
+| `status` | 窗口状态 |
+
+`(provider_key_id, window_type)` 唯一。尚未重置且 `quota_used >= quota_limit` 的窗口会阻止该 Key 被调度。
 
 ### model
 
@@ -231,6 +264,7 @@ erDiagram
 | `user_id` | 发起请求的用户 |
 | `api_key_id` | 本次请求使用的平台 API Key |
 | `provider_id` | 上游 Provider |
+| `provider_key_id` | 最终实际使用的 Provider Key |
 | `model_id` | 调用模型 |
 | `status_code` | 网关或上游响应状态码 |
 | `latency_ms` | 请求耗时，单位毫秒 |
@@ -245,7 +279,7 @@ erDiagram
 
 ### usage_record
 
-用量记录表，只记录成功产生费用的调用。
+用量记录表，记录成功调用以及流式失败前已经实际发生并计费的部分用量。
 
 | 字段 | 含义 |
 | --- | --- |
@@ -253,17 +287,20 @@ erDiagram
 | `request_id` | 请求唯一 ID |
 | `user_id` | 消费用户 |
 | `model_id` | 调用模型 |
+| `provider_key_id` | 最终实际使用的 Provider Key |
 | `input_tokens` | 输入 token 数 |
 | `output_tokens` | 输出 token 数 |
 | `total_tokens` | 总 token 数 |
+| `usage_source` | `PROVIDER`、`ESTIMATED` 或 `MISSING` |
 | `cost_amount` | 本次调用费用 |
 | `created_at` | 创建时间 |
 
 使用方式：
 
-- 成功请求才写入 `usage_record`。
-- 失败请求只写 `request_log`，不写 `usage_record`，也不扣费。
-- `usage_record` 和 `wallet_transaction` 应和成功请求扣费放在同一个事务中。
+- 成功请求写入 `usage_record` 并扣费。
+- 流式请求在已经收到 Provider 事件后失败或断开时，写入部分 usage 并扣除已发生费用。
+- 第一个 Provider 事件前失败时只写 `request_log`，不扣费。
+- `usage_record`、`wallet_transaction`、余额更新、请求日志和幂等终态位于同一个事务中。
 
 ## 常用查询场景
 

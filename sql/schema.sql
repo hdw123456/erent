@@ -189,6 +189,7 @@ CREATE TABLE IF NOT EXISTS usage_record (
     input_tokens INT NOT NULL DEFAULT 0,
     output_tokens INT NOT NULL DEFAULT 0,
     total_tokens INT NOT NULL DEFAULT 0,
+    usage_source VARCHAR(16) NOT NULL DEFAULT 'PROVIDER',
     cost_amount DECIMAL(18, 6) NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_usage_record_request_id (request_id),

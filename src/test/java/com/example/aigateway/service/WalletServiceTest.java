@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
+/** Verifies wallet service behavior. */
 class WalletServiceTest {
 
     @Test

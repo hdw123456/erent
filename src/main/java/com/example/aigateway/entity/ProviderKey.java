@@ -2,6 +2,7 @@ package com.example.aigateway.entity;
 
 import java.time.LocalDateTime;
 
+/** Persistence model for provider key data. */
 public class ProviderKey {
     private Long id;
     private Long providerId;

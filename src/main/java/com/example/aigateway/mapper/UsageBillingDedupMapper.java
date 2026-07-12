@@ -3,6 +3,7 @@ package com.example.aigateway.mapper;
 import com.example.aigateway.entity.UsageBillingDedup;
 import org.apache.ibatis.annotations.Param;
 
+/** MyBatis persistence operations for usage billing dedup data. */
 public interface UsageBillingDedupMapper {
     int insertUsageBillingDedup(UsageBillingDedup usageBillingDedup);
 

@@ -18,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+/** Applies per-API-key fixed-window limits before gateway calls. */
 @Component
 public class ApiKeyRateLimitFilter extends OncePerRequestFilter {
     private final FixedWindowRateLimiter rateLimiter;
@@ -42,6 +43,7 @@ public class ApiKeyRateLimitFilter extends OncePerRequestFilter {
         return !isGatewayPath(request.getServletPath());
     }
 
+    /** Enforces API-key, user, and client-IP dimensions before entering a controller. */
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,

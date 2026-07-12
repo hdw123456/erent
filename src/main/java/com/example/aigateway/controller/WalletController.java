@@ -8,6 +8,7 @@ import com.example.aigateway.service.CurrentUserService;
 import com.example.aigateway.entity.Wallet;
 import com.example.aigateway.dto.response.WalletResponse;
 
+/** Exposes the current user's wallet balance. */
 @RestController
 @RequestMapping("/api/wallets")
 public class WalletController {

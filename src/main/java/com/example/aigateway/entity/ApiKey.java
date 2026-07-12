@@ -2,6 +2,7 @@ package com.example.aigateway.entity;
 
 import java.util.Date;
 
+/** Persistence model for api key data. */
 public class ApiKey {
     // DB API Key
     private Long id;

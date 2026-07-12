@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** Owns the atomic usage, wallet, transaction, request-log, and idempotency write. */
 @Service
 public class BillingService {
     private static final String TRANSACTION_TYPE_USAGE_DEDUCT = "USAGE_DEDUCT";
@@ -46,31 +47,42 @@ public class BillingService {
         this.usageBillingDedupMapper = usageBillingDedupMapper;
     }
 
+    /** Commits successful usage and the completed idempotency result in one transaction. */
     @Transactional
     public void recordSuccessfulUsage(RequestLog successLog, UsageRecord usageRecord, Long idempotencyRecordId,
             String requestFingerprint, String idempotencyResponseJson) {
-        if (!claimUsageBillingDedup(successLog, requestFingerprint)) {
-            return;
-        }
-
-        BigDecimal costAmount = requireValidCost(usageRecord.getCostAmount());
-        Wallet wallet = lockWallet(usageRecord.getUserId());
-        BigDecimal balanceAfter = deduct(wallet, costAmount);
-
-        requestLogMapper.insertRequestLog(successLog);
-        usageRecordMapper.insertUsageRecord(usageRecord);
-        walletTransactionMapper.insertWalletTransaction(new WalletTransaction(
-                wallet.getId(),
-                TRANSACTION_TYPE_USAGE_DEDUCT,
-                costAmount.negate(),
-                balanceAfter,
-                usageRecord.getRequestId()));
-        if (idempotencyRecordId != null) {
-            idempotencyRecordMapper.updateIdempotencyRecordResult(
-                    idempotencyRecordId, IDEMPOTENCY_STATUS_COMPLETED, idempotencyResponseJson, null);
-        }
+        recordChargedUsage(
+                successLog,
+                usageRecord,
+                idempotencyRecordId,
+                requestFingerprint,
+                IDEMPOTENCY_STATUS_COMPLETED,
+                idempotencyResponseJson,
+                null);
     }
 
+    /**
+     * Charges provider work already consumed before a stream failed or the client disconnected.
+     * The idempotency record remains failed, so a partial response is never replayed as success.
+     */
+    @Transactional
+    public void recordPartialUsage(
+            RequestLog requestLog,
+            UsageRecord usageRecord,
+            Long idempotencyRecordId,
+            String requestFingerprint,
+            String errorCode) {
+        recordChargedUsage(
+                requestLog,
+                usageRecord,
+                idempotencyRecordId,
+                requestFingerprint,
+                IDEMPOTENCY_STATUS_FAILED,
+                null,
+                errorCode);
+    }
+
+    /** Records a terminal failure without creating usage or changing the wallet. */
     @Transactional
     public void recordFailedRequestWithoutCharge(RequestLog failedLog, Long idempotencyRecordId, String errorCode) {
         requestLogMapper.insertRequestLog(failedLog);
@@ -114,6 +126,7 @@ public class BillingService {
                 HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
+    /** Locks the single wallet row that serializes concurrent balance deductions. */
     private Wallet lockWallet(Long userId) {
         if (userId == null) {
             throw new BusinessException("USER_ID_REQUIRED", "User id is required for billing");
@@ -144,11 +157,44 @@ public class BillingService {
         return costAmount;
     }
 
-    private boolean claimUsageBillingDedup(RequestLog successLog, String requestFingerprint) {
-        if (successLog == null || successLog.getRequestId() == null || successLog.getRequestId().isBlank()) {
+    private void recordChargedUsage(
+            RequestLog requestLog,
+            UsageRecord usageRecord,
+            Long idempotencyRecordId,
+            String requestFingerprint,
+            String idempotencyStatus,
+            String idempotencyResponseJson,
+            String errorCode) {
+        if (!claimUsageBillingDedup(requestLog, requestFingerprint)) {
+            return;
+        }
+
+        BigDecimal costAmount = requireValidCost(usageRecord.getCostAmount());
+        Wallet wallet = lockWallet(usageRecord.getUserId());
+        BigDecimal balanceAfter = deduct(wallet, costAmount);
+
+        requestLogMapper.insertRequestLog(requestLog);
+        usageRecordMapper.insertUsageRecord(usageRecord);
+        walletTransactionMapper.insertWalletTransaction(new WalletTransaction(
+                wallet.getId(),
+                TRANSACTION_TYPE_USAGE_DEDUCT,
+                costAmount.negate(),
+                balanceAfter,
+                usageRecord.getRequestId()));
+        if (idempotencyRecordId != null) {
+            idempotencyRecordMapper.updateIdempotencyRecordResult(
+                    idempotencyRecordId,
+                    idempotencyStatus,
+                    idempotencyResponseJson,
+                    errorCode);
+        }
+    }
+
+    private boolean claimUsageBillingDedup(RequestLog requestLog, String requestFingerprint) {
+        if (requestLog == null || requestLog.getRequestId() == null || requestLog.getRequestId().isBlank()) {
             throw new BusinessException("REQUEST_ID_REQUIRED", "Request id is required for billing");
         }
-        if (successLog.getApiKeyId() == null) {
+        if (requestLog.getApiKeyId() == null) {
             throw new BusinessException("API_KEY_ID_REQUIRED", "API key id is required for billing");
         }
         if (requestFingerprint == null || requestFingerprint.isBlank()) {
@@ -159,7 +205,7 @@ public class BillingService {
         }
 
         UsageBillingDedup billingDedup = new UsageBillingDedup(
-                successLog.getRequestId(), successLog.getApiKeyId(), requestFingerprint);
+                requestLog.getRequestId(), requestLog.getApiKeyId(), requestFingerprint);
         int inserted = usageBillingDedupMapper.insertUsageBillingDedupIgnore(billingDedup);
         if (inserted == 1) {
             return true;

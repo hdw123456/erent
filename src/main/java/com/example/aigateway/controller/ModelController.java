@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.aigateway.dto.ProviderModelPricing;
 import com.example.aigateway.service.ModelService;
 
+/** Lists models and pricing available to authenticated users. */
 @RestController
 @RequestMapping("/api/models")
 public class ModelController {

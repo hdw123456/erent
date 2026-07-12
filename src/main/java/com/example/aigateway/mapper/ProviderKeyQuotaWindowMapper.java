@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
+/** MyBatis persistence operations for provider key quota window data. */
 public interface ProviderKeyQuotaWindowMapper {
     void upsertQuotaWindow(ProviderKeyQuotaWindow quotaWindow);
 

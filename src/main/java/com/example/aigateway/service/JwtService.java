@@ -15,6 +15,7 @@ import java.util.Date;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 
+/** Issues and validates signed access and refresh tokens. */
 @Service
 public class JwtService {
 

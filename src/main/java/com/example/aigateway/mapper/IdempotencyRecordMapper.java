@@ -3,6 +3,7 @@ package com.example.aigateway.mapper;
 import com.example.aigateway.entity.IdempotencyRecord;
 import org.apache.ibatis.annotations.Param;
 
+/** MyBatis persistence operations for idempotency record data. */
 public interface IdempotencyRecordMapper {
     int insertIdempotencyRecord(IdempotencyRecord idempotencyRecord);
 

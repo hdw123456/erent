@@ -9,6 +9,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+/** Resolves the authenticated management-user identifier. */
 @Service
 public class CurrentUserService {
     private final UserService userService;

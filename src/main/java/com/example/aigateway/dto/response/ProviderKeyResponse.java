@@ -2,6 +2,7 @@ package com.example.aigateway.dto.response;
 
 import java.time.LocalDateTime;
 
+/** Serialized response data for provider key operations. */
 public class ProviderKeyResponse {
     private Long id;
     private Long providerId;

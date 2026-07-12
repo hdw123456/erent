@@ -3,6 +3,7 @@ package com.example.aigateway.dto.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+/** Validated request data for create api key operations. */
 public class CreateApiKeyRequest {
 
     @NotBlank

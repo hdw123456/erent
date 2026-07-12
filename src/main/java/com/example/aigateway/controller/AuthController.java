@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+/** Handles user registration, login, and token refresh. */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {

@@ -11,6 +11,7 @@ import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 
+/** Configures the Netty-backed WebClient used for upstream provider traffic. */
 @Configuration
 public class WebClientConfig {
     @Bean

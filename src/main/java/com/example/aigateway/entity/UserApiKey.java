@@ -1,6 +1,7 @@
 package com.example.aigateway.entity;
 
 
+/** Persistence model for user api key data. */
 public class UserApiKey {
     private UserAccount userAccount;
     private int apiKeyCount;

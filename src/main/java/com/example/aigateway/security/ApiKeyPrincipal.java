@@ -1,5 +1,6 @@
 package com.example.aigateway.security;
 
+/** Authenticated identity attached to gateway API key requests. */
 public class ApiKeyPrincipal {
     private final Long apiKeyId;
     private final Long userId;

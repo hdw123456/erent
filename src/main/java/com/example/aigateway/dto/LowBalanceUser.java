@@ -2,6 +2,7 @@ package com.example.aigateway.dto;
 
 import java.math.BigDecimal;
 
+/** Projection used for low balance user queries. */
 public class LowBalanceUser {
     private Long userId;
     private String username;

@@ -1,5 +1,6 @@
 package com.example.aigateway.dto.response;
 
+/** Serialized response data for user operations. */
 public class UserResponse {
     private Long id;
     private String username;

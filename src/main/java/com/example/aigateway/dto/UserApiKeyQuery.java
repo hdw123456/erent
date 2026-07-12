@@ -1,5 +1,6 @@
 package com.example.aigateway.dto;
 
+/** Projection used for user api key query queries. */
 public class UserApiKeyQuery {
     private Long userId;
     private String username;

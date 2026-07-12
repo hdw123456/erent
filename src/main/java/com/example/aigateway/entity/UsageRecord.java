@@ -3,6 +3,7 @@ package com.example.aigateway.entity;
 import java.math.BigDecimal;
 import java.util.Date;
 
+/** Persistence model for usage record data. */
 public class UsageRecord {
     private Long id;
     private String requestId;
@@ -12,6 +13,7 @@ public class UsageRecord {
     private Integer inputTokens;
     private Integer outputTokens;
     private Integer totalTokens;
+    private String usageSource = "PROVIDER";
     private BigDecimal costAmount;
     private Date createdAt;
 
@@ -91,6 +93,14 @@ public class UsageRecord {
 
     public void setTotalTokens(Integer totalTokens) {
         this.totalTokens = totalTokens;
+    }
+
+    public String getUsageSource() {
+        return usageSource;
+    }
+
+    public void setUsageSource(String usageSource) {
+        this.usageSource = usageSource;
     }
 
     public BigDecimal getCostAmount() {

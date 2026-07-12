@@ -8,8 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+/** Normalizes transport and provider failures into gateway errors. */
 @Service
 public class UpstreamErrorService {
+    /** Unwraps reactive transport failures while preserving provider response metadata. */
     public BusinessException toBusinessException(Throwable throwable) {
         if (throwable instanceof BusinessException businessException) {
             return businessException;

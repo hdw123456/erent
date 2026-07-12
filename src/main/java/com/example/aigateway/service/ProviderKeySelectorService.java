@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+/** Selects ordered, schedulable provider credentials for a call. */
 @Service
 public class ProviderKeySelectorService {
     private final ProviderKeyMapper providerKeyMapper;

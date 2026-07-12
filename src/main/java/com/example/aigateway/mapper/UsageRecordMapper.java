@@ -6,6 +6,7 @@ import java.util.Date;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
+/** MyBatis persistence operations for usage record data. */
 public interface UsageRecordMapper {
     void insertUsageRecord(UsageRecord usageRecord);
 

@@ -2,6 +2,7 @@ package com.example.aigateway.dto.response;
 
 import java.util.List;
 
+/** Serialized response data for request log page operations. */
 public class RequestLogPageResponse {
     private List<RequestLogResponse> items;
     private int page;

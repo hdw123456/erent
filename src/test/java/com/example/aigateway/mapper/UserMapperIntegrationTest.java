@@ -5,19 +5,35 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.jdbc.Sql;
+import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:mysql://localhost:3306/ai_gateway?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai",
-        "spring.datasource.username=root",
-        "spring.datasource.password=root",
-        "spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver"
-})
+/** Verifies user mapper integration behavior. */
+@SpringBootTest
+@Testcontainers(disabledWithoutDocker = true)
 class UserMapperIntegrationTest {
+
+    @Container
+    private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
+            .withDatabaseName("ai_gateway")
+            .withUsername("test")
+            .withPassword("test");
+
+    @DynamicPropertySource
+    static void mysqlProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
+        registry.add("spring.datasource.username", MYSQL::getUsername);
+        registry.add("spring.datasource.password", MYSQL::getPassword);
+        registry.add("spring.datasource.driver-class-name", MYSQL::getDriverClassName);
+    }
 
     @Autowired
     private UserMapper userMapper;

@@ -2,6 +2,7 @@ package com.example.aigateway.dto;
 
 import java.util.Date;
 
+/** Projection used for request log query queries. */
 public class RequestLogQuery {
     private Long userId;
     private Long modelId;

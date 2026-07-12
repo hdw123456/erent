@@ -5,6 +5,7 @@ import com.example.aigateway.entity.UserAccount;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 
+/** MyBatis persistence operations for user data. */
 public interface UserMapper {
     // Define methods for mapping UserAccount objects to database operations
     void insertUser(UserAccount user);

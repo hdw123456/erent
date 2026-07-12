@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
+/** Verifies fixed window rate limiter behavior. */
 class FixedWindowRateLimiterTest {
 
     @Test

@@ -3,6 +3,7 @@ package com.example.aigateway.provider.gemini;
 import com.example.aigateway.dto.response.ChatResponse;
 import java.util.List;
 
+/** Gemini payload model for gemini response. */
 public class GeminiResponse {
     private List<Candidate> candidates;
 

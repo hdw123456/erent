@@ -8,6 +8,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
+/** Resolves a provider code to its registered adapter. */
 @Component
 public class ProviderAdapterFactory {
     private final Map<String, ProviderAdapter> adapters;

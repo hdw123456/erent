@@ -18,6 +18,7 @@ import com.example.aigateway.common.ErrorResponse;
 
 import java.io.IOException;
 
+/** Authenticates management API requests from JWT access tokens. */
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 

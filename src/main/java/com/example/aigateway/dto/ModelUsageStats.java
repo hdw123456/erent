@@ -2,6 +2,7 @@ package com.example.aigateway.dto;
 
 import java.math.BigDecimal;
 
+/** Projection used for model usage stats queries. */
 public class ModelUsageStats {
     private Long modelId;
     private String modelCode;

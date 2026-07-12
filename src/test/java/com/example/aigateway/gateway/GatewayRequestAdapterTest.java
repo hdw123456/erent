@@ -8,6 +8,7 @@ import com.example.aigateway.dto.request.ChatRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+/** Verifies gateway request adapter behavior. */
 class GatewayRequestAdapterTest {
 
     @Test

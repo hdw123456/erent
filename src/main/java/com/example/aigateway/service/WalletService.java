@@ -6,6 +6,7 @@ import com.example.aigateway.mapper.WalletMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+/** Reads wallet state for users and administrators. */
 @Service
 public class WalletService {
     private final WalletMapper walletMapper;

@@ -2,6 +2,7 @@ package com.example.aigateway.entity;
 
 import java.util.Date;
 
+/** Persistence model for request log data. */
 public class RequestLog {
     private Long id;
     private String requestId;

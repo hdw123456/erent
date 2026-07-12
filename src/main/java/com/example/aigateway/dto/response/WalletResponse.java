@@ -2,6 +2,7 @@ package com.example.aigateway.dto.response;
 
 import java.math.BigDecimal;
 
+/** Serialized response data for wallet operations. */
 public class WalletResponse {
     private Long id;
     private Long userId;

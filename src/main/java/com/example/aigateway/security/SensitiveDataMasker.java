@@ -1,5 +1,6 @@
 package com.example.aigateway.security;
 
+/** Produces safe hints for secrets without exposing raw values. */
 public final class SensitiveDataMasker {
     private SensitiveDataMasker() {
     }

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
+/** Formats non-streaming responses for public gateway protocols. */
 @Component
 public class GatewayResponseAdapter {
     public Map<String, Object> toOpenAiChatCompletion(ChatResponse response) {

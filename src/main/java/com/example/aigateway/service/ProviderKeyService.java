@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+/** Validates, encrypts, and manages user-owned provider keys. */
 @Service
 public class ProviderKeyService {
     private static final Logger logger = LoggerFactory.getLogger(ProviderKeyService.class);

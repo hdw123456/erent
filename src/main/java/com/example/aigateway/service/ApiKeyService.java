@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+/** Creates, authenticates, rotates, and disables platform API keys. */
 @Service
 public class ApiKeyService {
     private static final int API_KEY_PREFIX_LENGTH = 8;

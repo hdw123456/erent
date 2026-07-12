@@ -14,6 +14,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
+/** Validated request data for chat operations. */
 public class ChatRequest {
     @Size(max = 32)
     @JsonAlias({"provider", "provider_code"})

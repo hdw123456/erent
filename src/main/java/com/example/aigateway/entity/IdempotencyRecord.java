@@ -2,6 +2,7 @@ package com.example.aigateway.entity;
 
 import java.util.Date;
 
+/** Persistence model for idempotency record data. */
 public class IdempotencyRecord {
     private Long id;
     private String scope;

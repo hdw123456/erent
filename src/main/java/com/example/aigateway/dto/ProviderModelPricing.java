@@ -2,6 +2,7 @@ package com.example.aigateway.dto;
 
 import java.math.BigDecimal;
 
+/** Projection used for provider model pricing queries. */
 public class ProviderModelPricing {
     private Long providerId;
     private String providerCode;

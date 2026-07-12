@@ -1,5 +1,6 @@
 package com.example.aigateway.ratelimit;
 
+/** Result of one rate-limit evaluation. */
 public record RateLimitDecision(
         boolean allowed,
         String dimension,

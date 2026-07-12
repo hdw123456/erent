@@ -2,6 +2,7 @@ package com.example.aigateway.common;
 
 import java.time.OffsetDateTime;
 
+/** Stable error envelope returned by HTTP and streaming endpoints. */
 public record ErrorResponse(
         String code,
         String message,
@@ -12,4 +13,3 @@ public record ErrorResponse(
         return new ErrorResponse(code, message, details, OffsetDateTime.now());
     }
 }
-

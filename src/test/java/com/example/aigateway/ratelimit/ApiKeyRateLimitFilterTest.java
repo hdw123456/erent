@@ -16,6 +16,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+/** Verifies api key rate limit filter behavior. */
 class ApiKeyRateLimitFilterTest {
 
     @AfterEach

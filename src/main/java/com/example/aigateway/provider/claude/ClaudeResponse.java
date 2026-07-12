@@ -4,6 +4,7 @@ import com.example.aigateway.dto.response.ChatResponse;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
+/** Anthropic payload model for claude response. */
 public class ClaudeResponse {
     private String id;
     private String model;

@@ -1,5 +1,6 @@
 package com.example.aigateway.dto.response;
 
+/** Serialized response data for request log operations. */
 public class RequestLogResponse {
     private Long id;
     private String requestId;

@@ -9,11 +9,11 @@
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO usage_record (
             request_id, user_id, model_id, provider_key_id, input_tokens, output_tokens,
-            total_tokens, cost_amount
+            total_tokens, usage_source, cost_amount
         )
         VALUES (
             #{requestId}, #{userId}, #{modelId}, #{providerKeyId}, #{inputTokens}, #{outputTokens},
-            #{totalTokens}, #{costAmount}
+            #{totalTokens}, #{usageSource}, #{costAmount}
         )
     </insert>
 

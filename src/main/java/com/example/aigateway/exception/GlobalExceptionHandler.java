@@ -22,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/** Maps validation, domain, and unexpected exceptions to HTTP errors. */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 

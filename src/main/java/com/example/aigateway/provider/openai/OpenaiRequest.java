@@ -5,11 +5,15 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
 import java.util.List;
 
+/** OpenAI-compatible chat-completions request payload. */
 public class OpenaiRequest {
     private String model;
     private List<Message> messages;
     private boolean stream;
     private Double temperature;
+
+    @JsonProperty("stream_options")
+    private StreamOptions streamOptions;
 
     @JsonProperty("max_tokens")
     private Integer maxTokens;
@@ -67,6 +71,34 @@ public class OpenaiRequest {
 
     public void setMaxTokens(Integer maxTokens) {
         this.maxTokens = maxTokens;
+    }
+
+    public StreamOptions getStreamOptions() {
+        return streamOptions;
+    }
+
+    public void setStreamOptions(StreamOptions streamOptions) {
+        this.streamOptions = streamOptions;
+    }
+
+    /** Requests the terminal usage chunk for a streamed chat completion. */
+    public static class StreamOptions {
+        @JsonProperty("include_usage")
+        private boolean includeUsage;
+
+        public static StreamOptions includeUsage() {
+            StreamOptions options = new StreamOptions();
+            options.setIncludeUsage(true);
+            return options;
+        }
+
+        public boolean isIncludeUsage() {
+            return includeUsage;
+        }
+
+        public void setIncludeUsage(boolean includeUsage) {
+            this.includeUsage = includeUsage;
+        }
     }
 
     public static class Message {

@@ -5,6 +5,7 @@ import com.example.aigateway.dto.response.ChatResponse;
 import com.example.aigateway.exception.BusinessException;
 import com.example.aigateway.gateway.GatewayRequestAdapter;
 import com.example.aigateway.gateway.GatewayResponseAdapter;
+import com.example.aigateway.gateway.stream.GatewayStreamProtocol;
 import com.example.aigateway.security.ApiKeyPrincipal;
 import com.example.aigateway.service.ModelCallService;
 import jakarta.validation.Valid;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+/** Accepts internal and provider-compatible model-call protocols. */
 @RestController
 public class ModelCallController {
     private final ModelCallService modelCallService;
@@ -62,7 +64,13 @@ public class ModelCallController {
         ApiKeyPrincipal principal = currentApiKey(authentication);
         ChatRequest request = gatewayRequestAdapter.fromChatCompletions(rawBody);
         if (request.isStream()) {
-            return streamResponse(modelCallService.stream(request, principal, null));
+            return streamResponse(modelCallService.stream(
+                    request,
+                    principal,
+                    idempotencyKey,
+                    "chat_completions",
+                    rawBody,
+                    GatewayStreamProtocol.OPENAI_CHAT_COMPLETIONS));
         }
 
         ChatResponse response = modelCallService.chat(
@@ -84,7 +92,13 @@ public class ModelCallController {
         ApiKeyPrincipal principal = currentApiKey(authentication);
         ChatRequest request = gatewayRequestAdapter.fromAnthropicMessages(rawBody);
         if (request.isStream()) {
-            return streamResponse(modelCallService.stream(request, principal, null));
+            return streamResponse(modelCallService.stream(
+                    request,
+                    principal,
+                    idempotencyKey,
+                    "messages",
+                    rawBody,
+                    GatewayStreamProtocol.ANTHROPIC_MESSAGES));
         }
 
         ChatResponse response = modelCallService.chat(
@@ -119,7 +133,13 @@ public class ModelCallController {
         ApiKeyPrincipal principal = currentApiKey(authentication);
         ChatRequest request = gatewayRequestAdapter.fromResponses(rawBody);
         if (request.isStream()) {
-            return streamResponse(modelCallService.stream(request, principal, null));
+            return streamResponse(modelCallService.stream(
+                    request,
+                    principal,
+                    idempotencyKey,
+                    "responses",
+                    rawBody,
+                    GatewayStreamProtocol.OPENAI_RESPONSES));
         }
 
         ChatResponse response = modelCallService.chat(
@@ -140,9 +160,9 @@ public class ModelCallController {
     public ResponseEntity<?> responsesWebsocketProbe(Authentication authentication) {
         currentApiKey(authentication);
         throw new BusinessException(
-                "UNSUPPORTED_ENDPOINT",
-                "Responses websocket is not implemented yet",
-                HttpStatus.NOT_IMPLEMENTED
+                "WEBSOCKET_UPGRADE_REQUIRED",
+                "Use a WebSocket upgrade request for the Responses WebSocket endpoint",
+                HttpStatus.UPGRADE_REQUIRED
         );
     }
 

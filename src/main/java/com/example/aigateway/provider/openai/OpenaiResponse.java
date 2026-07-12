@@ -4,6 +4,7 @@ import com.example.aigateway.dto.response.ChatResponse;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
+/** OpenAI-compatible non-streaming response payload. */
 public class OpenaiResponse {
     private String id;
     private String object;

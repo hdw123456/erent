@@ -3,6 +3,7 @@ package com.example.aigateway.dto;
 import java.math.BigDecimal;
 import java.util.Date;
 
+/** Projection used for user daily usage summary queries. */
 public class UserDailyUsageSummary {
     private Long userId;
     private String username;

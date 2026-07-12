@@ -4,6 +4,7 @@ import com.example.aigateway.entity.ApiKey;
 import org.apache.ibatis.annotations.Param;
 import java.util.List;
 
+/** MyBatis persistence operations for api key data. */
 public interface ApiKeyMapper {
 
     void insertApiKey(@Param("apiKey") ApiKey apiKey, @Param("userId") long userId);

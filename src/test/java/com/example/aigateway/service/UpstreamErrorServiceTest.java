@@ -11,6 +11,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 
+/** Verifies upstream error service behavior. */
 class UpstreamErrorServiceTest {
     private final UpstreamErrorService upstreamErrorService = new UpstreamErrorService();
 
