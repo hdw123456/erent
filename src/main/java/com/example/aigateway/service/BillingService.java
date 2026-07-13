@@ -49,9 +49,9 @@ public class BillingService {
 
     /** Commits successful usage and the completed idempotency result in one transaction. */
     @Transactional
-    public void recordSuccessfulUsage(RequestLog successLog, UsageRecord usageRecord, Long idempotencyRecordId,
+    public boolean recordSuccessfulUsage(RequestLog successLog, UsageRecord usageRecord, Long idempotencyRecordId,
             String requestFingerprint, String idempotencyResponseJson) {
-        recordChargedUsage(
+        return recordChargedUsage(
                 successLog,
                 usageRecord,
                 idempotencyRecordId,
@@ -157,7 +157,7 @@ public class BillingService {
         return costAmount;
     }
 
-    private void recordChargedUsage(
+    private boolean recordChargedUsage(
             RequestLog requestLog,
             UsageRecord usageRecord,
             Long idempotencyRecordId,
@@ -166,7 +166,7 @@ public class BillingService {
             String idempotencyResponseJson,
             String errorCode) {
         if (!claimUsageBillingDedup(requestLog, requestFingerprint)) {
-            return;
+            return false;
         }
 
         BigDecimal costAmount = requireValidCost(usageRecord.getCostAmount());
@@ -188,6 +188,7 @@ public class BillingService {
                     idempotencyResponseJson,
                     errorCode);
         }
+        return true;
     }
 
     private boolean claimUsageBillingDedup(RequestLog requestLog, String requestFingerprint) {

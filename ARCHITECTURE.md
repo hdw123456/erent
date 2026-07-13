@@ -15,6 +15,7 @@
 - 记录请求、token usage 和实际使用的 Provider Key。
 - 根据 `pricing_rule` 计算费用，串行化并发钱包扣减并写入流水。
 - 通过 Idempotency-Key、request fingerprint 和扣费去重表防止重复调用及重复扣费。
+- 提供 RabbitMQ 事件拓扑、JSON 事件、生产者和手动确认消费者骨架，为后续异步日志与用量统计做准备。
 
 ## 2. 技术栈
 
@@ -27,6 +28,7 @@
 | 安全 | Spring Security、JWT、平台 API Key |
 | 数据访问 | MyBatis XML、MySQL |
 | 限流 | Redis Lua 固定窗口 |
+| 异步消息 | RabbitMQ、Spring AMQP（当前接入非流式成功链路） |
 | Provider Key | 应用层加密、调用时解密、数据库状态调度 |
 | JSON 幂等 | RFC 8785/JCS canonicalization、SHA-256 |
 | 测试 | JUnit 5、Mockito、Spring Test、Testcontainers 依赖 |
@@ -49,6 +51,8 @@ flowchart LR
     Mapper["MyBatis mappers"]
     MySQL[(MySQL)]
     Redis[(Redis)]
+    Messaging["RabbitMQ messaging skeleton"]
+    RabbitMQ[(RabbitMQ)]
     Upstream["OpenAI-compatible provider"]
 
     Agent --> Security --> Controller
@@ -58,6 +62,8 @@ flowchart LR
     Call --> Provider --> Client --> Upstream
     Call --> Billing --> Mapper --> MySQL
     Key --> MySQL
+    Call --> Messaging
+    Messaging --> RabbitMQ
 ```
 
 ## 4. 分层职责
@@ -70,6 +76,7 @@ flowchart LR
 | Provider 层 | `provider`, `client` | Provider 能力抽象、请求构造、上游 HTTP/SSE、错误保真 |
 | 安全层 | `security`, `config` | API Key、JWT、密码、Provider Key 加密和 Spring Security 配置 |
 | 限流层 | `ratelimit` | API Key、用户和 IP 三维固定窗口限流 |
+| 消息层 | `messaging`, `messaging.event`, `messaging.consumer` | RabbitMQ Topic 拓扑、版本化 JSON 事件、持久消息发布和手动 ACK 消费骨架 |
 | 持久化层 | `entity`, `mapper`, `resources/mapper` | 数据实体、Mapper 接口和 SQL |
 | 数据定义 | `sql` | 全量 schema、种子数据和增量迁移 |
 
@@ -104,6 +111,8 @@ sequenceDiagram
     participant P as ProviderAdapter
     participant B as BillingService
     participant DB as MySQL
+    participant E as GatewayEventPublisher
+    participant R as RabbitMQ
 
     C->>MC: POST + optional Idempotency-Key
     MC->>S: normalized ChatRequest + raw payload + route
@@ -119,11 +128,18 @@ sequenceDiagram
     B->>DB: claim billing dedup
     B->>DB: SELECT wallet FOR UPDATE
     B->>DB: update wallet + request_log + usage_record + wallet_transaction + idempotency
+    B-->>S: committed + newlyRecorded
+    alt newly recorded
+        S->>E: request.completed + usage.recorded
+        E->>R: persistent JSON messages
+    else duplicate billing request
+        S->>S: skip duplicate events
+    end
     S-->>MC: ChatResponse
     MC-->>C: protocol-shaped JSON
 ```
 
-只有鉴权、模型、钱包和 Provider Key 都通过后才访问上游。Provider 返回成功后才根据实际 usage 扣费。
+只有鉴权、模型、钱包和 Provider Key 都通过后才访问上游。Provider 返回成功后才根据实际 usage 扣费。RabbitMQ 发布发生在核心事务提交之后；`AmqpException` 只记录错误，不会把已成功扣费的调用改判为失败。当前发布仍是 best-effort，数据库提交后进程退出或 Broker 不可用可能造成消息丢失，后续由 Transactional Outbox 解决。
 
 ## 7. HTTP SSE 流式调用链
 
@@ -266,6 +282,7 @@ api_key 1--N usage_billing_dedup
 
 - `spring.datasource.*`：MySQL。
 - `spring.data.redis.*`：Redis。
+- `spring.rabbitmq.*`：RabbitMQ 连接以及 listener 手动确认、prefetch 和并发参数；均可通过 `RABBITMQ_*` 环境变量覆盖。
 - `gateway.rate-limit.*`：固定窗口参数。
 - `gateway.upstream.*`：连接、读、响应和事件间超时。
 - `gateway.provider-key.max-failover-attempts`：单次调用最多候选 Key 数。
@@ -298,10 +315,12 @@ api_key 1--N usage_billing_dedup
 - `provider_key_quota_window` 已参与调度过滤，但尚无按 Provider 类型自动同步 5 小时/周额度的后台任务。
 - WebSocket `previous_response_id` 只在当前连接内保存文本历史，不提供跨进程或断线恢复。
 - usage 估算是 Provider 不返回 usage 时的保底方案，不能代替官方 tokenizer 或 Provider 账单对账。
+- RabbitMQ 当前接入非流式成功请求：只有首次完成 billing dedup 和核心事务时，`ModelCallService` 才 best-effort 发布 `request.completed` 与 `usage.recorded`；Consumer 仍只记录日志，不写数据库。流式成功/失败事件、Confirm、重试、死信、幂等消费和 Outbox 尚未实现。
 
 ## 15. 验证策略
 
 - 纯单元测试覆盖 fingerprint、计费去重、固定窗口、Provider Key 状态、非流式 failover、流式 failover、usage 聚合、三种 SSE 协议和 WebSocket 续接。
 - `UserMapperIntegrationTest` 使用 MySQL Testcontainer；Docker 不可用时由 JUnit 明确跳过。
+- `RabbitMessagingSkeletonTest` 在不连接 Broker 的情况下验证持久拓扑、发布路由/消息持久属性和手动 ACK。
 - 修改数据库结构时同时更新 `sql/schema.sql` 和对应日期的幂等迁移脚本。
 - 修改流式协议时至少验证事件顺序、终止事件、usage、错误事件和幂等重放。

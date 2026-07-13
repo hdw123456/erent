@@ -24,6 +24,7 @@ import com.example.aigateway.gateway.stream.GatewayStreamProtocol;
 import com.example.aigateway.gateway.stream.GatewayStreamSink;
 import com.example.aigateway.gateway.stream.GatewayStreamResponseAdapter;
 import com.example.aigateway.mapper.IdempotencyRecordMapper;
+import com.example.aigateway.messaging.GatewayEventPublisher;
 import com.example.aigateway.provider.ProviderAdapter;
 import com.example.aigateway.provider.ProviderAdapterFactory;
 import com.example.aigateway.provider.ProviderCredential;
@@ -247,6 +248,7 @@ class ModelCallServiceStreamingTest {
         private final ModelService models = mock(ModelService.class);
         private final BillingService billing = mock(BillingService.class);
         private final IdempotencyRecordMapper idempotencyMapper = mock(IdempotencyRecordMapper.class);
+        private final GatewayEventPublisher eventPublisher = mock(GatewayEventPublisher.class);
         private final ProviderAdapter adapter = mock(ProviderAdapter.class);
         private final ObjectMapper objectMapper = new ObjectMapper();
         private final ProviderModelPricing model = model();
@@ -266,7 +268,8 @@ class ModelCallServiceStreamingTest {
                     new UpstreamErrorService(),
                     billing,
                     idempotencyMapper,
-                    objectMapper);
+                    objectMapper,
+                    eventPublisher);
         }
 
         private static ProviderModelPricing model() {

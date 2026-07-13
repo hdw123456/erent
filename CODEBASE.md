@@ -8,7 +8,7 @@
 ai-gateway/
 ├── AGENTS.md                       仓库级开发与文档同步规则
 ├── pom.xml                         Maven 依赖和构建配置
-├── docker-compose.yml              本地 MySQL 与 Redis
+├── docker-compose.yml              本地 MySQL、Redis 与 RabbitMQ
 ├── README.md                       项目入口和本地启动说明
 ├── ARCHITECTURE.md                 架构、依赖、调用链和一致性说明
 ├── CODEBASE.md                     文件与代码索引
@@ -19,7 +19,7 @@ ai-gateway/
 └── src/test/java/                  单元测试和集成测试
 ```
 
-`pom.xml` 的主要依赖：Spring MVC、WebFlux、WebSocket、Security、Validation、Redis、MyBatis、MySQL、Jasypt、JJWT、JCS、JUnit、Mockito 和 Testcontainers。
+`pom.xml` 的主要依赖：Spring MVC、WebFlux、WebSocket、Security、Validation、Redis、Spring AMQP、MyBatis、MySQL、Jasypt、JJWT、JCS、JUnit、Mockito 和 Testcontainers。
 
 `docs/` 文件：
 
@@ -42,6 +42,19 @@ ai-gateway/
 | `config/ResponsesWebSocketConfig` | 注册 Responses WebSocket 地址 | `registerWebSocketHandlers()` |
 | `security/PasswordConfig` | 提供 BCrypt 密码编码器 | 密码编码器 Bean |
 | `common/ErrorResponse` | 稳定错误响应结构 | `of()` 创建错误对象 |
+
+### RabbitMQ 消息骨架
+
+| 文件/类型 | 用途 | 关键方法 |
+| --- | --- | --- |
+| `messaging/RabbitTopology` | 声明 `ai-gateway.events` Topic Exchange，日志、用量、通知三个持久 Queue，Binding 和 Jackson JSON converter | `gatewayEventsExchange()`；三个 Queue/Binding Bean；`rabbitMessageConverter()` |
+| `messaging/GatewayEventPublisher` | 将事件以持久消息发布到 Topic Exchange | `publishRequestCompleted()`；`publishUsageRecorded()` |
+| `messaging/event/RequestCompletedEvent` | 请求完成事件信封，包含 event/request/trace ID、版本、归因、状态和耗时 | record 访问器 |
+| `messaging/event/UsageRecordedEvent` | 已记录用量事件信封，包含 token、成本、usage source、版本和追踪信息 | record 访问器 |
+| `messaging/consumer/RequestLogConsumer` | 日志型最小 Consumer，成功后手动 ACK，运行时异常时 NACK 并重新入队 | `consume()` |
+| `messaging/consumer/UsageStatisticsConsumer` | 用量型最小 Consumer，成功后手动 ACK，运行时异常时 NACK 并重新入队 | `consume()` |
+
+`messaging`、`messaging.event` 和 `messaging.consumer` 各有 `package-info.java` 说明包边界。当前 Producer 接入非流式成功链路，核心事务首次提交后 best-effort 发布两个事件；两个 Consumer 只记录日志，不写业务表。
 
 每个 Java 包都有 `package-info.java`，用于说明该包的边界和职责。
 
@@ -119,7 +132,8 @@ ai-gateway/
 - `handleStreamEvent()`：累加 usage/文本并发送协议事件。
 - `completeStream()`：先完成 usage 和钱包事务，再发送终止事件。
 - `handleStreamFailure()`：有上游事件时写部分 usage 并扣费；无事件时只写失败日志。
-- `writeUsageRecord()` / `toUsageRecord()`：将 `ChatResponse.Usage`、价格和 Provider Key 转为 `UsageRecord`。
+- `writeUsageRecord()` / `toUsageRecord()`：将 `ChatResponse.Usage`、价格和 Provider Key 转为 `UsageRecord`；首次成功落库后发布请求与用量事件，MQ 异常不改变核心调用结果。
+- `publishEventsBestEffort()`：分别发布 `request.completed` 和 `usage.recorded`，隔离并记录 `AmqpException`。
 - `claimIdempotencyRequest()`：使用 `INSERT IGNORE` 获得一次执行权。
 - `replayIdempotentResponse()`：重放非流式结果。
 - `replayIdempotentStream()`：重放已缓存的完整 SSE frames。
@@ -130,7 +144,7 @@ ai-gateway/
 
 拥有钱包和 usage 的事务边界。
 
-- `recordSuccessfulUsage()`：原子写成功日志、usage、钱包余额、钱包流水和幂等完成结果。
+- `recordSuccessfulUsage()`：原子写成功日志、usage、钱包余额、钱包流水和幂等完成结果，并返回本次是否首次落库。
 - `recordPartialUsage()`：对已经发生的部分流式用量扣费，但把幂等结果保持为失败。
 - `recordFailedRequestWithoutCharge()`：只写失败日志和幂等失败结果。
 - `ensureWalletCanStartCall()`：调用前检查钱包存在且余额大于零。
@@ -340,7 +354,7 @@ rl:fixed:<dimension>:<identifier>:<window>s:<windowId>
 
 ## 13. Resources
 
-`src/main/resources/application.yml`：数据库、Redis、MyBatis、server、限流、上游超时、Provider Key failover、日志、Jasypt、JWT 和 Provider 默认地址。
+`src/main/resources/application.yml`：数据库、Redis、RabbitMQ、MyBatis、server、限流、上游超时、Provider Key failover、日志、Jasypt、JWT 和 Provider 默认地址。Rabbit listener 当前使用手动 ACK，prefetch/concurrency 可由环境变量调整。
 
 `src/main/resources/mapper/`：全部 MyBatis SQL。金额、余额和费用使用 `DECIMAL`/`BigDecimal`，禁止改成浮点数。
 
@@ -363,6 +377,8 @@ rl:fixed:<dimension>:<identifier>:<window>s:<windowId>
 | `ApiKeyAuthFilterTest` | API Key header 鉴权 |
 | `ApiKeyRateLimitFilterTest` | 多维限流 filter |
 | `FixedWindowRateLimiterTest` | Redis Lua 计数和窗口行为 |
+| `RabbitMessagingSkeletonTest` | RabbitMQ 持久拓扑、Producer 路由/持久属性和 Consumer 手动 ACK；无需真实 Broker |
+| `ModelCallServiceMessagingTest` | 首次记录发布双事件、重复记录跳过发布、MQ 异常不逃逸 |
 | `WalletServiceTest` | 钱包查询 |
 | `UserMapperIntegrationTest` | Testcontainers MySQL/MyBatis 用户写读；Docker 不可用时明确跳过 |
 
@@ -382,3 +398,4 @@ rl:fixed:<dimension>:<identifier>:<window>s:<windowId>
 | 修改限流 | `GatewayRateLimitProperties`、`ApiKeyRateLimitFilter`、`FixedWindowRateLimiter` |
 | 修改鉴权路径 | `ApiKeyAuthFilter.isGatewayPath()`、`SecurityConfig` |
 | 修改数据库字段 | Entity、Mapper XML、`schema.sql`、新日期迁移、测试 |
+| 修改消息拓扑或事件 | `RabbitTopology`、`messaging/event`、`GatewayEventPublisher`、对应 Consumer 和 `RabbitMessagingSkeletonTest` |

@@ -1,7 +1,9 @@
 package com.example.aigateway.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -36,8 +38,10 @@ class BillingServiceTest {
         when(fixture.usageBillingDedupMapper.insertUsageBillingDedupIgnore(any())).thenReturn(1);
         when(fixture.walletMapper.getWalletByUserIdForUpdate(100L)).thenReturn(wallet);
 
-        fixture.service.recordSuccessfulUsage(requestLog, usageRecord, null, "fingerprint-a", "{}");
+        boolean newlyRecorded = fixture.service.recordSuccessfulUsage(
+                requestLog, usageRecord, null, "fingerprint-a", "{}");
 
+        assertTrue(newlyRecorded);
         ArgumentCaptor<UsageBillingDedup> captor = ArgumentCaptor.forClass(UsageBillingDedup.class);
         verify(fixture.usageBillingDedupMapper).insertUsageBillingDedupIgnore(captor.capture());
         UsageBillingDedup dedup = captor.getValue();
@@ -57,8 +61,10 @@ class BillingServiceTest {
         when(fixture.usageBillingDedupMapper.getByRequestIdAndApiKeyIdForUpdate("req_1", 10L))
                 .thenReturn(new UsageBillingDedup("req_1", 10L, "fingerprint-a"));
 
-        fixture.service.recordSuccessfulUsage(requestLog(), usageRecord(), null, "fingerprint-a", "{}");
+        boolean newlyRecorded = fixture.service.recordSuccessfulUsage(
+                requestLog(), usageRecord(), null, "fingerprint-a", "{}");
 
+        assertFalse(newlyRecorded);
         verify(fixture.usageBillingDedupMapper).getByRequestIdAndApiKeyIdForUpdate("req_1", 10L);
         verifyNoInteractions(
                 fixture.walletMapper,

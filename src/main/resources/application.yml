@@ -12,6 +12,17 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:ai_gateway}
+    password: ${RABBITMQ_PASSWORD:ai_gateway_dev}
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: ${RABBITMQ_PREFETCH:5}
+        concurrency: ${RABBITMQ_CONCURRENCY:1}
+        max-concurrency: ${RABBITMQ_MAX_CONCURRENCY:1}
   mvc:
     throw-exception-if-no-handler-found: true
   web:

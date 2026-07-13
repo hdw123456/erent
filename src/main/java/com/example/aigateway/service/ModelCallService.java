@@ -15,6 +15,9 @@ import com.example.aigateway.gateway.stream.GatewayStreamSink;
 import com.example.aigateway.gateway.stream.SseGatewayStreamSink;
 import com.example.aigateway.gateway.stream.StreamReplayResponse;
 import com.example.aigateway.mapper.IdempotencyRecordMapper;
+import com.example.aigateway.messaging.GatewayEventPublisher;
+import com.example.aigateway.messaging.event.RequestCompletedEvent;
+import com.example.aigateway.messaging.event.UsageRecordedEvent;
 import com.example.aigateway.provider.ProviderAdapter;
 import com.example.aigateway.provider.ProviderAdapterFactory;
 import com.example.aigateway.provider.ProviderCredential;
@@ -26,6 +29,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HexFormat;
@@ -37,6 +41,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.erdtman.jcs.JsonCanonicalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.AmqpException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -62,6 +67,7 @@ public class ModelCallService {
     private final BillingService billingService;
     private final IdempotencyRecordMapper idempotencyRecordMapper;
     private final ObjectMapper objectMapper;
+    private final GatewayEventPublisher eventPublisher;
 
     public ModelCallService(
             ProviderAdapterFactory providerAdapterFactory,
@@ -72,7 +78,8 @@ public class ModelCallService {
             UpstreamErrorService upstreamErrorService,
             BillingService billingService,
             IdempotencyRecordMapper idempotencyRecordMapper,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            GatewayEventPublisher eventPublisher) {
         this.providerAdapterFactory = providerAdapterFactory;
         this.providerKeySelectorService = providerKeySelectorService;
         this.providerKeyAvailabilityService = providerKeyAvailabilityService;
@@ -82,13 +89,16 @@ public class ModelCallService {
         this.billingService = billingService;
         this.idempotencyRecordMapper = idempotencyRecordMapper;
         this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     public ChatResponse chat(ChatRequest request, ApiKeyPrincipal principal, String idempotencyKey) {
         return chat(request, principal, idempotencyKey, "model_call", writeJson(request));
     }
 
-    /** Executes a non-streaming call with replay, key failover, and atomic billing. */
+    /**
+     * Executes a non-streaming call with replay, key failover, and atomic billing.
+     */
     public ChatResponse chat(
             ChatRequest request,
             ApiKeyPrincipal principal,
@@ -128,7 +138,8 @@ public class ModelCallService {
         try {
             model = modelService.getAvailableModelByCode(request.getProviderCode(), request.getModel());
             billingService.ensureWalletCanStartCall(principal.getUserId());
-            List<ProviderCredential> credentials = providerKeySelectorService.selectCredentials(model, principal.getUserId());
+            List<ProviderCredential> credentials = providerKeySelectorService.selectCredentials(model,
+                    principal.getUserId());
             ProviderAdapter adapter = providerAdapterFactory.getAdapter(model.getProviderCode());
 
             ChatResponse response = null;
@@ -160,7 +171,8 @@ public class ModelCallService {
 
             RequestLog succeslog = toRequestLog(
                     requestId, principal, model, providerKeyId(usedCredential), HttpStatus.OK.value(), startedAt, null);
-            writeUsageRecord(succeslog, response.getUsage(), model, idempotencyId(idempotencyRecord), requestFingerprint,
+            writeUsageRecord(succeslog, response.getUsage(), model, idempotencyId(idempotencyRecord),
+                    requestFingerprint,
                     writeJson(response));
             return response;
         } catch (Throwable throwable) {
@@ -209,7 +221,9 @@ public class ModelCallService {
         return emitter;
     }
 
-    /** Starts a stream on a caller-owned transport and returns a cancellation hook. */
+    /**
+     * Starts a stream on a caller-owned transport and returns a cancellation hook.
+     */
     public Runnable streamToSink(
             ChatRequest request,
             ApiKeyPrincipal principal,
@@ -233,7 +247,10 @@ public class ModelCallService {
         return () -> handleClientDisconnect(state, new IOException("Stream cancelled"));
     }
 
-    /** Claims stream identity, validates prerequisites, and subscribes the provider pipeline. */
+    /**
+     * Claims stream identity, validates prerequisites, and subscribes the provider
+     * pipeline.
+     */
     private StreamCallState startStream(
             ChatRequest request,
             ApiKeyPrincipal principal,
@@ -321,7 +338,8 @@ public class ModelCallService {
                     "PROVIDER_UNAVAILABLE",
                     "PROVIDER_UPSTREAM_ERROR",
                     "PROVIDER_EMPTY_RESPONSE",
-                    "PROVIDER_MODEL_NOT_FOUND" -> true;
+                    "PROVIDER_MODEL_NOT_FOUND" ->
+                true;
             default -> false;
         };
     }
@@ -330,7 +348,10 @@ public class ModelCallService {
         return credential == null ? null : credential.getProviderKeyId();
     }
 
-    /** Retries another key only while no downstream-visible provider event has arrived. */
+    /**
+     * Retries another key only while no downstream-visible provider event has
+     * arrived.
+     */
     private Flux<ProviderStreamEvent> providerStreamWithFailover(
             ProviderAdapter adapter,
             ChatRequest request,
@@ -379,7 +400,9 @@ public class ModelCallService {
         }
     }
 
-    /** Persists terminal usage before publishing the downstream completion frames. */
+    /**
+     * Persists terminal usage before publishing the downstream completion frames.
+     */
     private void completeStream(StreamCallState state) {
         if (!state.finalized.compareAndSet(false, true)) {
             return;
@@ -427,7 +450,10 @@ public class ModelCallService {
         }
     }
 
-    /** Charges already-emitted partial work, or records an uncharged pre-output failure. */
+    /**
+     * Charges already-emitted partial work, or records an uncharged pre-output
+     * failure.
+     */
     private void handleStreamFailure(
             StreamCallState state,
             BusinessException exception,
@@ -587,12 +613,39 @@ public class ModelCallService {
                 usage,
                 model,
                 usage == null ? "MISSING" : StreamResponseAccumulator.USAGE_SOURCE_PROVIDER);
-        billingService.recordSuccessfulUsage(
+        boolean newlyRecorded = billingService.recordSuccessfulUsage(
                 requestLog,
                 usageRecord,
                 idempotencyRecordId,
                 requestFingerprint,
                 responseJson);
+
+        if (!newlyRecorded) {
+            logger.info("Skip duplicate gateway events, requestId={}", requestLog.getRequestId());
+            return;
+        }
+
+        publishEventsBestEffort(requestLog, usageRecord);
+    }
+
+    private void publishEventsBestEffort(RequestLog requestLog, UsageRecord usageRecord) {
+        try {
+            eventPublisher.publishRequestCompleted(toRequestCompletedEvent(requestLog));
+        } catch (AmqpException exception) {
+            logger.error(
+                    "Core transaction committed, but request event publish failed, requestId={}",
+                    requestLog.getRequestId(),
+                    exception);
+        }
+
+        try {
+            eventPublisher.publishUsageRecorded(toUsageRecordedEvent(usageRecord));
+        } catch (AmqpException exception) {
+            logger.error(
+                    "Core transaction committed, but usage event publish failed, requestId={}",
+                    requestLog.getRequestId(),
+                    exception);
+        }
     }
 
     private UsageRecord toUsageRecord(
@@ -640,7 +693,10 @@ public class ModelCallService {
                 expiresAt);
     }
 
-    /** Uses insert-ignore as the concurrency-safe ownership claim for an idempotency key. */
+    /**
+     * Uses insert-ignore as the concurrency-safe ownership claim for an idempotency
+     * key.
+     */
     private IdempotencyClaim claimIdempotencyRequest(IdempotencyRecord record) {
         int inserted = idempotencyRecordMapper.insertIdempotencyRecordIgnore(record);
 
@@ -845,5 +901,53 @@ public class ModelCallService {
     }
 
     private record IdempotencyClaim(boolean created, IdempotencyRecord record) {
+    }
+
+    private RequestCompletedEvent toRequestCompletedEvent(
+            RequestLog log) {
+
+        String eventId = UUID.randomUUID().toString();
+        String traceId = log.getRequestId();
+
+        return new RequestCompletedEvent(
+                eventId,
+                log.getRequestId(),
+                log.getUserId(),
+                log.getApiKeyId(),
+                log.getProviderId(),
+                log.getProviderKeyId(),
+                log.getModelId(),
+                log.getStatusCode(),
+                log.getLatencyMs(),
+                log.getErrorCode(),
+                Instant.now(),
+                1,
+                traceId);
+    }
+
+    private UsageRecordedEvent toUsageRecordedEvent(
+            UsageRecord usage) {
+
+        String eventId = UUID.randomUUID().toString();
+        String traceId = usage.getRequestId();
+
+        return new UsageRecordedEvent(
+                eventId,
+                usage.getRequestId(),
+                usage.getUserId(),
+                usage.getModelId(),
+                usage.getProviderKeyId(),
+                valueOrZero(usage.getInputTokens()),
+                valueOrZero(usage.getOutputTokens()),
+                valueOrZero(usage.getTotalTokens()),
+                usage.getCostAmount(),
+                usage.getUsageSource(),
+                Instant.now(),
+                1,
+                traceId);
+    }
+
+    private int valueOrZero(Integer value) {
+        return value == null ? 0 : value;
     }
 }

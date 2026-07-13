@@ -1,6 +1,7 @@
 package com.example.aigateway.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -13,6 +14,7 @@ import com.example.aigateway.dto.response.ChatResponse;
 import com.example.aigateway.entity.RequestLog;
 import com.example.aigateway.entity.UsageRecord;
 import com.example.aigateway.exception.BusinessException;
+import com.example.aigateway.messaging.GatewayEventPublisher;
 import com.example.aigateway.provider.ProviderAdapter;
 import com.example.aigateway.provider.ProviderAdapterFactory;
 import com.example.aigateway.provider.ProviderCredential;
@@ -34,6 +36,7 @@ class ModelCallServiceProviderKeyFailoverTest {
         ProviderKeyAvailabilityService availabilityService = mock(ProviderKeyAvailabilityService.class);
         ModelService modelService = mock(ModelService.class);
         BillingService billingService = mock(BillingService.class);
+        GatewayEventPublisher eventPublisher = mock(GatewayEventPublisher.class);
         ProviderAdapter adapter = mock(ProviderAdapter.class);
         ProviderModelPricing model = model();
         ChatRequest request = request();
@@ -50,6 +53,12 @@ class ModelCallServiceProviderKeyFailoverTest {
         when(adapterFactory.getAdapter("OPENAI")).thenReturn(adapter);
         when(adapter.chat(request, first)).thenThrow(rateLimited);
         when(adapter.chat(request, second)).thenReturn(upstreamResponse);
+        when(billingService.recordSuccessfulUsage(
+                any(RequestLog.class),
+                any(UsageRecord.class),
+                isNull(),
+                anyString(),
+                anyString())).thenReturn(true);
 
         ModelCallService service = new ModelCallService(
                 adapterFactory,
@@ -60,7 +69,8 @@ class ModelCallServiceProviderKeyFailoverTest {
                 new UpstreamErrorService(),
                 billingService,
                 null,
-                new ObjectMapper());
+                new ObjectMapper(),
+                eventPublisher);
 
         ChatResponse result = service.chat(request, new ApiKeyPrincipal(10L, 100L, "ak_test"), null);
 

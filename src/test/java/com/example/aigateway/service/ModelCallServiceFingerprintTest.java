@@ -2,7 +2,9 @@ package com.example.aigateway.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.mockito.Mockito.mock;
 
+import com.example.aigateway.messaging.GatewayEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
@@ -44,6 +46,16 @@ class ModelCallServiceFingerprintTest {
     }
 
     private ModelCallService service() {
-        return new ModelCallService(null, null, null, null, null, null, null, null, new ObjectMapper());
+        return new ModelCallService(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new ObjectMapper(),
+                mock(GatewayEventPublisher.class));
     }
 }

@@ -12,6 +12,7 @@ AI API 聚合网关与用量计费平台学习项目。
 - Provider Key 调度、调用前 failover 和健康状态
 - 请求日志、流式用量、幂等计费、并发余额扣减
 - Redis 限流
+- 非流式成功调用的 RabbitMQ 事件发布、Topic 拓扑与手动 ACK Consumer 骨架
 - MyBatis 持久化
 - 单元测试、Web 测试、Mapper 集成测试
 
@@ -23,6 +24,7 @@ AI API 聚合网关与用量计费平台学习项目。
 - MyBatis
 - MySQL 8.4 LTS
 - Redis
+- RabbitMQ / Spring AMQP
 - Spring Security
 - WebClient
 - JUnit 5 / Mockito / Testcontainers
@@ -51,6 +53,7 @@ ai-gateway/
     exception/
     gateway/
     mapper/
+    messaging/
     security/
     service/
     provider/
@@ -66,7 +69,7 @@ ai-gateway/
 
 ## 本地运行
 
-可以用 Docker Compose 启动 MySQL 和 Redis：
+可以用 Docker Compose 启动 MySQL、Redis 和 RabbitMQ：
 
 ```powershell
 docker compose up -d
@@ -82,7 +85,13 @@ $env:DB_USERNAME="root"
 $env:DB_PASSWORD="your_password"
 $env:REDIS_HOST="localhost"
 $env:REDIS_PORT="6379"
+$env:RABBITMQ_HOST="localhost"
+$env:RABBITMQ_PORT="5672"
+$env:RABBITMQ_USERNAME="ai_gateway"
+$env:RABBITMQ_PASSWORD="ai_gateway_dev"
 ```
+
+RabbitMQ 管理界面为 `http://localhost:15672`，Compose 默认用户名和密码分别为 `ai_gateway`、`ai_gateway_dev`。
 
 启动项目：
 
