@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: ["main"]
+    branches: [develop, main]
+
   pull_request:
-    branches: ["main"]
+    branches: [develop, main]
 
 permissions:
   contents: read
@@ -47,3 +48,70 @@ jobs:
           file: ./Dockerfile
           push: false
           tags: ai-gateway:${{ github.sha }}
+
+  deploy:
+    name: Deploy production
+    needs: [test, docker-build]
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    environment:
+      name: erent
+      url: http://106.53.192.153:8088/api/health
+
+    concurrency:
+      group: production
+      cancel-in-progress: false
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          : "${SSH_PRIVATE_KEY:?Missing SSH_PRIVATE_KEY}"
+          : "${SSH_KNOWN_HOSTS:?Missing SSH_KNOWN_HOSTS}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy with Docker Compose
+        env:
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          set -eu
+          : "${SSH_HOST:?Missing SSH_HOST}"
+          : "${SSH_USER:?Missing SSH_USER}"
+          : "${DEPLOY_PATH:?Missing DEPLOY_PATH}"
+
+          ssh \
+            -i ~/.ssh/id_ed25519 \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" "
+            set -eu
+            cd '$DEPLOY_PATH'
+            git checkout main
+            git -c core.sshCommand='ssh -i /home/deploy/.ssh/erent_github -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes' pull --ff-only origin main
+            docker compose config --quiet
+            docker compose up -d --build
+            docker compose ps
+
+            curl -fsS \
+              --retry 12 \
+              --retry-delay 5 \
+              --retry-all-errors \
+              http://127.0.0.1:8088/api/health || {
+                docker compose logs --tail=100 app nginx
+                exit 1
+              }
+          "
