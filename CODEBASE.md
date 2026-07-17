@@ -8,11 +8,15 @@
 ai-gateway/
 ├── AGENTS.md                       仓库级开发与文档同步规则
 ├── pom.xml                         Maven 依赖和构建配置
-├── docker-compose.yml              本地 MySQL、Redis 与 RabbitMQ
+├── Dockerfile                      后端应用镜像构建
+├── docker-compose.yml              应用、MySQL、Redis、RabbitMQ 与 Nginx 编排
 ├── README.md                       项目入口和本地启动说明
 ├── ARCHITECTURE.md                 架构、依赖、调用链和一致性说明
 ├── CODEBASE.md                     文件与代码索引
 ├── docs/                           API、数据库、安全、定价和需求文档
+├── nginx/
+│   ├── default.conf                当前加载的 HTTP /api 与 SSE 代理
+│   └── https.conf.example          未加载的 HTTPS/TLS 模板
 ├── sql/                            全量 schema、种子数据、增量迁移
 ├── src/main/java/                  Java 主代码
 ├── src/main/resources/             application.yml 和 MyBatis XML
@@ -30,6 +34,7 @@ ai-gateway/
 | `pricing.md` | token 计价、流式 usage 与部分计费规则 |
 | `security.md` | 密钥、DTO、日志和错误响应安全约束 |
 | `requirements.md` | 初始 V1 范围与非目标，作为历史需求基线 |
+| `nginx-deployment.md` | Nginx 当前入口、服务器同步和后续 HTTPS 启用步骤 |
 
 ## 2. 应用与配置
 
@@ -399,3 +404,4 @@ rl:fixed:<dimension>:<identifier>:<window>s:<windowId>
 | 修改鉴权路径 | `ApiKeyAuthFilter.isGatewayPath()`、`SecurityConfig` |
 | 修改数据库字段 | Entity、Mapper XML、`schema.sql`、新日期迁移、测试 |
 | 修改消息拓扑或事件 | `RabbitTopology`、`messaging/event`、`GatewayEventPublisher`、对应 Consumer 和 `RabbitMessagingSkeletonTest` |
+| 修改 Nginx、SSE 代理或 HTTPS | `nginx/default.conf`、`nginx/https.conf.example`、`docker-compose.yml`、`docs/nginx-deployment.md` |

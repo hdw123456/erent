@@ -23,6 +23,7 @@
 | --- | --- |
 | 应用框架 | Java 21、Spring Boot 3.5 |
 | HTTP 服务 | Spring MVC |
+| 反向代理 | Nginx（Compose HTTP 入口与 SSE 代理） |
 | 上游异步客户端 | Spring WebFlux `WebClient`、Reactor |
 | WebSocket | Spring WebSocket |
 | 安全 | Spring Security、JWT、平台 API Key |
@@ -65,6 +66,15 @@ flowchart LR
     Call --> Messaging
     Messaging --> RabbitMQ
 ```
+
+Compose 部署时，当前 Nginx 入口链路为：
+
+```mermaid
+flowchart LR
+    Client["HTTP /api client"] --> Host["host :8088"] --> Nginx["Nginx :80"] --> App["app :8080"]
+```
+
+Nginx 当前只代理 `/api/`。其中 `/api/chat/completions/stream` 使用独立 SSE 规则，关闭响应缓冲和缓存并延长读取超时；其他 `/api/` 请求使用普通反向代理。HTTPS 目前只有未加载的模板，不代表域名、证书或 443 入口已经部署。
 
 ## 4. 分层职责
 
@@ -289,6 +299,9 @@ api_key 1--N usage_billing_dedup
 - `providers.*`：Provider 默认 base URL 和环境变量回退。
 - `JASYPT_PASSWORD`：Provider Key 加密主密码，生产环境必须显式提供。
 - `JWT_SECRET`：JWT 签名密钥，生产环境不能使用默认值。
+- `docker-compose.yml`：编排应用、MySQL、Redis、RabbitMQ 和 Nginx；当前发布宿主机 `8088` 到 Nginx `80`。
+- `nginx/default.conf`：Compose 实际挂载的 HTTP `/api/` 与 SSE 代理配置。
+- `nginx/https.conf.example`：未加载的域名、证书和 443 入口模板。
 
 ## 13. 扩展方式
 
@@ -316,6 +329,7 @@ api_key 1--N usage_billing_dedup
 - WebSocket `previous_response_id` 只在当前连接内保存文本历史，不提供跨进程或断线恢复。
 - usage 估算是 Provider 不返回 usage 时的保底方案，不能代替官方 tokenizer 或 Provider 账单对账。
 - RabbitMQ 当前接入非流式成功请求：只有首次完成 billing dedup 和核心事务时，`ModelCallService` 才 best-effort 发布 `request.completed` 与 `usage.recorded`；Consumer 仍只记录日志，不写数据库。流式成功/失败事件、Confirm、重试、死信、幂等消费和 Outbox 尚未实现。
+- HTTPS 目前仅提供配置模板；真实域名、证书申请、443 映射、证书挂载和自动续期尚未启用。
 
 ## 15. 验证策略
 
