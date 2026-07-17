@@ -1,8 +1,21 @@
+# HTTPS TEMPLATE ONLY - this file is not loaded by the current Compose setup.
+# Replace the example domain and certificate paths before copying it to an active .conf file.
+
 server {
     listen 80;
-    server_name _;
+    server_name api.example.com;
 
-    # SSE 使用长连接并关闭代理缓冲，避免事件被聚合后一次性返回。
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name api.example.com;
+
+    ssl_certificate /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
     location = /api/chat/completions/stream {
         proxy_pass http://app:8080;
         proxy_http_version 1.1;
