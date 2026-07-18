@@ -34,6 +34,10 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      packages: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -41,13 +45,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build Docker image
+      - name: Login to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and optionally push Docker image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
-          push: false
-          tags: ai-gateway:${{ github.sha }}
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
 
   deploy:
     name: Deploy production
@@ -56,6 +68,11 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: read
+
     timeout-minutes: 30
 
     environment:
@@ -89,32 +106,65 @@ jobs:
           SSH_HOST: ${{ vars.SSH_HOST }}
           SSH_USER: ${{ vars.SSH_USER }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          IMAGE_TAG: ${{ github.sha }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           : "${SSH_HOST:?Missing SSH_HOST}"
           : "${SSH_USER:?Missing SSH_USER}"
           : "${DEPLOY_PATH:?Missing DEPLOY_PATH}"
+          : "${IMAGE_TAG:?Missing IMAGE_TAG}"
+          : "${GHCR_USERNAME:?Missing GHCR_USERNAME}"
+          : "${GHCR_TOKEN:?Missing GHCR_TOKEN}"
 
-          ssh \
-            -i ~/.ssh/id_ed25519 \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            "$SSH_USER@$SSH_HOST" "
+          printf '%s' "$GHCR_TOKEN" |
+            ssh \
+              -i ~/.ssh/id_ed25519 \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              "$SSH_USER@$SSH_HOST" "
             set -eu
+            DOCKER_CONFIG=\$(mktemp -d)
+            export DOCKER_CONFIG
+            trap 'rm -rf \"\$DOCKER_CONFIG\"' EXIT
+            docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin
+
             cd '$DEPLOY_PATH'
             git checkout main
             git -c core.sshCommand='ssh -i /home/deploy/.ssh/erent_github -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes' pull --ff-only origin main
-            docker compose config --quiet
-            docker compose up -d --build
-            docker compose ps
+            export IMAGE_TAG='$IMAGE_TAG'
+
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.prod.yml \
+              config --quiet
+
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.prod.yml \
+              pull app
+
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.prod.yml \
+              up -d --no-build --remove-orphans
+
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.prod.yml \
+              ps
 
             curl -fsS \
               --retry 12 \
               --retry-delay 5 \
               --retry-all-errors \
               http://127.0.0.1:8088/api/health || {
-                docker compose logs --tail=100 app nginx
+                docker compose \
+                  -f docker-compose.yml \
+                  -f docker-compose.prod.yml \
+                  logs --tail=100 app nginx
                 exit 1
               }
           "
