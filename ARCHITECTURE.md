@@ -24,6 +24,7 @@
 | 应用框架 | Java 21、Spring Boot 3.5 |
 | HTTP 服务 | Spring MVC |
 | 反向代理 | Nginx（Compose HTTP 入口与 SSE 代理） |
+| 应用指标 | Spring Boot Actuator、Micrometer、Prometheus |
 | 上游异步客户端 | Spring WebFlux `WebClient`、Reactor |
 | WebSocket | Spring WebSocket |
 | 安全 | Spring Security、JWT、平台 API Key |
@@ -75,6 +76,8 @@ flowchart LR
 ```
 
 Nginx 当前只代理 `/api/`。其中 `/api/chat/completions/stream` 使用独立 SSE 规则，关闭响应缓冲和缓存并延长读取超时；其他 `/api/` 请求使用普通反向代理。HTTPS 目前只有未加载的模板，不代表域名、证书或 443 入口已经部署。
+
+Compose 中的 Prometheus 每 15 秒通过内部服务地址 `app:8080/actuator/prometheus` 抓取应用指标。该链路不经过 Nginx；Prometheus Web 界面通过宿主机 `9090` 端口访问。
 
 ## 4. 分层职责
 
@@ -299,7 +302,8 @@ api_key 1--N usage_billing_dedup
 - `providers.*`：Provider 默认 base URL 和环境变量回退。
 - `JASYPT_PASSWORD`：Provider Key 加密主密码，生产环境必须显式提供。
 - `JWT_SECRET`：JWT 签名密钥，生产环境不能使用默认值。
-- `docker-compose.yml`：编排应用、MySQL、Redis、RabbitMQ 和 Nginx；当前发布宿主机 `8088` 到 Nginx `80`。
+- `docker-compose.yml`：编排应用、MySQL、Redis、RabbitMQ、Nginx 和 Prometheus；当前发布宿主机 `8088` 到 Nginx `80`，并发布宿主机 `9090` 到 Prometheus `9090`。
+- `monitoring/prometheus.yml`：每 15 秒从 `app:8080/actuator/prometheus` 抓取应用指标。
 - `nginx/default.conf`：Compose 实际挂载的 HTTP `/api/` 与 SSE 代理配置。
 - `nginx/https.conf.example`：未加载的域名、证书和 443 入口模板。
 

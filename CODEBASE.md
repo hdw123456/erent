@@ -9,7 +9,7 @@ ai-gateway/
 ├── AGENTS.md                       仓库级开发与文档同步规则
 ├── pom.xml                         Maven 依赖和构建配置
 ├── Dockerfile                      后端应用镜像构建
-├── docker-compose.yml              应用、MySQL、Redis、RabbitMQ 与 Nginx 编排
+├── docker-compose.yml              应用、MySQL、Redis、RabbitMQ、Nginx 与 Prometheus 编排
 ├── README.md                       项目入口和本地启动说明
 ├── ARCHITECTURE.md                 架构、依赖、调用链和一致性说明
 ├── CODEBASE.md                     文件与代码索引
@@ -17,6 +17,8 @@ ai-gateway/
 ├── nginx/
 │   ├── default.conf                当前加载的 HTTP /api 与 SSE 代理
 │   └── https.conf.example          未加载的 HTTPS/TLS 模板
+├── monitoring/
+│   └── prometheus.yml              Prometheus 抓取周期、任务、指标路径与目标
 ├── sql/                            全量 schema、种子数据、增量迁移
 ├── src/main/java/                  Java 主代码
 ├── src/main/resources/             application.yml 和 MyBatis XML
