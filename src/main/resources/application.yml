@@ -79,3 +79,9 @@ providers:
     api-key: ${OPENROUTER_API_KEY:}
     http-referer: ${OPENROUTER_HTTP_REFERER:}
     app-title: ${OPENROUTER_APP_TITLE:AI Gateway Learning}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
