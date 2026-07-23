@@ -39,7 +39,7 @@ class UserMapperIntegrationTest {
     private UserMapper userMapper;
 
     @Test
-    @Sql(scripts = "file:sql/schema.sql")
+    @Sql(scripts = "classpath:sql/schema.sql")
     void insertUserShouldGenerateIdAndBeQueryable() {
         String username = "mapper_user_" + UUID.randomUUID().toString().replace("-", "");
         UserAccount user = new UserAccount(username, username + "@example.com", "hashed_password");
