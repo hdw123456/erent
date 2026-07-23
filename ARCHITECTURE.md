@@ -1,261 +1,123 @@
 # AI Gateway Architecture
 
-本文描述 `ai-gateway` 的系统边界、模块职责、依赖方向、调用链和一致性约束。具体文件和方法索引见 [CODEBASE.md](CODEBASE.md)。
+本文描述 `ai-gateway` 当前的服务边界、依赖方向、调用链、数据一致性和部署形态。具体文件与维护入口见 [CODEBASE.md](CODEBASE.md)。
 
-仓库级维护约束见 [AGENTS.md](AGENTS.md)。任何影响架构、代码结构或能力边界的实现变更，都必须在同一次任务中同步检查并更新本文与 `CODEBASE.md`。
+## 1. 架构目标
 
-## 1. 系统目标
+当前版本不是把单体平均切成多个进程，而是先提取一个独立的边缘网关：
 
-项目是一个 Spring Boot AI API 中转网关，主要负责：
+```text
+模块化单体
+  -> 提取 gateway-service
+  -> 保留 core-service 内的强一致业务
+  -> 通过 Nacos 完成注册、发现和配置
+```
 
-- 兼容 OpenAI Chat Completions、Anthropic Messages 和 OpenAI Responses HTTP 接口。
-- 提供 Responses API WebSocket 模式的基础文本会话续接。
-- 使用平台 API Key 鉴权，并通过 Redis 固定窗口限制调用频率。
-- 为一次模型调用选择可调度的上游 Provider Key，并在连接建立前故障切换。
-- 记录请求、token usage 和实际使用的 Provider Key。
-- 根据 `pricing_rule` 计算费用，串行化并发钱包扣减并写入流水。
-- 通过 Idempotency-Key、request fingerprint 和扣费去重表防止重复调用及重复扣费。
-- 提供 RabbitMQ 事件拓扑、JSON 事件、生产者和手动确认消费者骨架，为后续异步日志与用量统计做准备。
+这一步主要解决：
 
-## 2. 技术栈
+- 客户端只有一个稳定入口；
+- 路由和业务实现分离；
+- HTTP、SSE、WebSocket 都能按服务名转发；
+- 具备真实的服务注册、发现和配置中心实践；
+- 两个服务可以独立构建、发布和观察；
+- 不破坏现有计费事务与流式调用语义。
 
-| 领域 | 技术 |
-| --- | --- |
-| 应用框架 | Java 21、Spring Boot 3.5 |
-| HTTP 服务 | Spring MVC |
-| 反向代理 | Nginx（Compose HTTP 入口与 SSE 代理） |
-| 应用指标 | Spring Boot Actuator、Micrometer、Prometheus |
-| 上游异步客户端 | Spring WebFlux `WebClient`、Reactor |
-| WebSocket | Spring WebSocket |
-| 安全 | Spring Security、JWT、平台 API Key |
-| 数据访问 | MyBatis XML、MySQL |
-| 限流 | Redis Lua 固定窗口 |
-| 异步消息 | RabbitMQ、Spring AMQP（当前接入非流式成功链路） |
-| Provider Key | 应用层加密、调用时解密、数据库状态调度 |
-| JSON 幂等 | RFC 8785/JCS canonicalization、SHA-256 |
-| 测试 | JUnit 5、Mockito、Spring Test、Testcontainers 依赖 |
-
-Spring MVC 负责下游 HTTP/SSE；WebFlux 只用于非阻塞上游调用。数据库事务属于阻塞 I/O，流事件在进入计费和 MyBatis 逻辑前切换到 Reactor `boundedElastic`。
-
-## 3. 总体结构
+## 2. 总体结构
 
 ```mermaid
 flowchart LR
-    Agent["Claude Code / Codex / OpenCode / API client"]
-    Security["Security filters\nAPI Key / JWT / rate limit"]
-    Controller["Controllers and WebSocket handler"]
-    Gateway["Protocol adapters\nrequest / response / stream"]
-    Call["ModelCallService"]
-    Key["Provider key selector and health"]
-    Provider["ProviderAdapter"]
-    Client["UpstreamHttpClient"]
-    Billing["BillingService"]
-    Mapper["MyBatis mappers"]
+    Client["API Client / Browser"]
+    Nginx["Nginx\npublic :8088"]
+    Gateway["gateway-service\nWebFlux :8080"]
+    Nacos["Nacos 3\nservice discovery + config"]
+    Core["core-service\nSpring MVC :8081"]
     MySQL[(MySQL)]
     Redis[(Redis)]
-    Messaging["RabbitMQ messaging skeleton"]
-    RabbitMQ[(RabbitMQ)]
-    Upstream["OpenAI-compatible provider"]
+    Rabbit[(RabbitMQ)]
+    Provider["AI Provider"]
+    Prometheus["Prometheus"]
+    Grafana["Grafana"]
 
-    Agent --> Security --> Controller
-    Security --> Redis
-    Controller --> Gateway --> Call
-    Call --> Key --> Mapper
-    Call --> Provider --> Client --> Upstream
-    Call --> Billing --> Mapper --> MySQL
-    Key --> MySQL
-    Call --> Messaging
-    Messaging --> RabbitMQ
+    Client --> Nginx --> Gateway
+    Gateway <-.register / discover / config.-> Nacos
+    Core <-.register / config.-> Nacos
+    Gateway -->|"lb://core-service"| Core
+    Core --> MySQL
+    Core --> Redis
+    Core --> Rabbit
+    Core --> Provider
+    Prometheus --> Gateway
+    Prometheus --> Core
+    Grafana --> Prometheus
 ```
 
-Compose 部署时，当前 Nginx 入口链路为：
+运行时只有 Nginx 对公网提供业务入口。`gateway-service`、`core-service`、Nacos、MySQL、Redis 和 RabbitMQ 位于 Docker 内部网络；管理端口最多绑定到宿主机回环地址。
 
-```mermaid
-flowchart LR
-    Client["HTTP /api client"] --> Host["host :8088"] --> Nginx["Nginx :80"] --> App["app :8080"]
-```
+## 3. 服务职责与依赖方向
 
-Nginx 当前只代理 `/api/`。其中 `/api/chat/completions/stream` 使用独立 SSE 规则，关闭响应缓冲和缓存并延长读取超时；其他 `/api/` 请求使用普通反向代理。HTTPS 目前只有未加载的模板，不代表域名、证书或 443 入口已经部署。
+### 3.1 `gateway-service`
 
-Compose 中的 Prometheus 每 15 秒通过内部服务地址 `app:8080/actuator/prometheus` 抓取应用指标。该链路不经过 Nginx；Prometheus Web 界面通过宿主机 `9090` 端口访问。
+`gateway-service` 是 Spring Cloud Gateway WebFlux 应用，负责：
 
-## 4. 分层职责
+- 匹配对外业务路径；
+- 从 Nacos 发现 `core-service` 实例；
+- 使用 Spring Cloud LoadBalancer 转发请求；
+- 保持 HTTP、SSE 和 WebSocket 协议语义；
+- 生成、校验和透传 `X-Request-Id`；
+- 删除来自公网的 `X-Internal-Token`、`X-User-Id`，避免伪造内部身份；
+- 暴露独立的健康检查和 Prometheus 指标。
 
-| 层 | 包 | 职责 |
-| --- | --- | --- |
-| 入口层 | `controller`, `gateway.websocket` | 路由、认证主体提取、HTTP/SSE/WebSocket 生命周期 |
-| 协议层 | `gateway`, `gateway.stream` | 三种请求格式归一化，非流式响应和流事件格式化 |
-| 应用层 | `service` | 模型解析、幂等、Key 选择、调用编排、usage 聚合、计费 |
-| Provider 层 | `provider`, `client` | Provider 能力抽象、请求构造、上游 HTTP/SSE、错误保真 |
-| 安全层 | `security`, `config` | API Key、JWT、密码、Provider Key 加密和 Spring Security 配置 |
-| 限流层 | `ratelimit` | API Key、用户和 IP 三维固定窗口限流 |
-| 消息层 | `messaging`, `messaging.event`, `messaging.consumer` | RabbitMQ Topic 拓扑、版本化 JSON 事件、持久消息发布和手动 ACK 消费骨架 |
-| 持久化层 | `entity`, `mapper`, `resources/mapper` | 数据实体、Mapper 接口和 SQL |
-| 数据定义 | `sql` | 全量 schema、种子数据和增量迁移 |
+它不访问数据库，不保存用户、API Key 或钱包数据，也不负责业务鉴权和计费。
 
-依赖方向保持为：入口层 -> 协议/应用层 -> Provider/持久化层。Mapper 不依赖 Service，Provider Adapter 不负责钱包或用户业务。
+### 3.2 `core-service`
 
-## 5. 入口与认证
+`core-service` 是原有 Spring MVC 业务应用，负责：
 
-管理接口位于 `/api/auth/**`、`/api/users/**`、`/api/api-keys/**` 等路径，使用 JWT。模型网关接口使用平台 API Key，接受：
+- 用户、角色、JWT、Refresh Token；
+- 平台 API Key 和 Provider Key；
+- API Key/JWT 鉴权与 Redis 限流；
+- 模型、价格、Provider Key 调度和 failover；
+- OpenAI、Anthropic、Responses 请求适配；
+- 上游 HTTP/SSE 调用和 Responses WebSocket 会话；
+- 幂等、请求日志、用量、钱包扣费和流水；
+- RabbitMQ 事件发布与消费者骨架；
+- MyBatis 与全部当前业务表；
+- 独立健康检查和 Prometheus 指标。
 
-- `Authorization: Bearer <platform-api-key>`
-- `x-api-key: <platform-api-key>`
-- `x-goog-api-key: <platform-api-key>`
-
-网关请求经过：
+当前依赖方向：
 
 ```text
-ApiKeyAuthFilter
-  -> ApiKeyRateLimitFilter
-  -> ModelCallController / ResponsesWebSocketHandler
+Nginx
+  -> gateway-service
+  -> core-service
+  -> MySQL / Redis / RabbitMQ / Provider
 ```
 
-限流同时检查 API Key、用户和来源 IP。任一维度超限即返回 `429`；Redis 异常时是否放行由 `gateway.rate-limit.fail-open` 决定。
+禁止让 `core-service` 回调 `gateway-service`。服务发现只用于网关找到核心服务，不启用按服务名自动暴露路由的 Discovery Locator。
 
-## 6. 非流式调用链
+## 4. 为什么暂时不继续拆分
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant MC as ModelCallController
-    participant S as ModelCallService
-    participant K as ProviderKeySelectorService
-    participant P as ProviderAdapter
-    participant B as BillingService
-    participant DB as MySQL
-    participant E as GatewayEventPublisher
-    participant R as RabbitMQ
+### 4.1 Provider 暂不独立
 
-    C->>MC: POST + optional Idempotency-Key
-    MC->>S: normalized ChatRequest + raw payload + route
-    S->>DB: claim idempotency record (optional)
-    S->>S: resolve model and check positive wallet
-    S->>K: select ordered provider credentials
-    loop until success or terminal error
-        S->>P: chat(request, credential)
-        P-->>S: response or provider error
-        S->>DB: update provider-key health
-    end
-    S->>B: request log + usage + fingerprint + response
-    B->>DB: claim billing dedup
-    B->>DB: SELECT wallet FOR UPDATE
-    B->>DB: update wallet + request_log + usage_record + wallet_transaction + idempotency
-    B-->>S: committed + newlyRecorded
-    alt newly recorded
-        S->>E: request.completed + usage.recorded
-        E->>R: persistent JSON messages
-    else duplicate billing request
-        S->>S: skip duplicate events
-    end
-    S-->>MC: ChatResponse
-    MC-->>C: protocol-shaped JSON
-```
+一次 Provider 调用不仅是普通 HTTP 转发，还包含：
 
-只有鉴权、模型、钱包和 Provider Key 都通过后才访问上游。Provider 返回成功后才根据实际 usage 扣费。RabbitMQ 发布发生在核心事务提交之后；`AmqpException` 只记录错误，不会把已成功扣费的调用改判为失败。当前发布仍是 best-effort，数据库提交后进程退出或 Broker 不可用可能造成消息丢失，后续由 Transactional Outbox 解决。
+- 保留 OpenAI 原始 JSON 中的未知字段；
+- 选择、解密并尝试多个 Provider Key；
+- 只允许在首个下游可见事件之前切换 Key；
+- 把上游流解析成中立事件，再转成三种下游协议；
+- SSE/WebSocket 断开、取消和部分用量计费；
+- 流结束后才能发送完成事件。
 
-## 7. HTTP SSE 流式调用链
+如果立刻独立 Provider 服务，需要先定义稳定的原始 payload、流事件、错误、取消和认证协议。当前这些仍是进程内 Java 类型和回调边界，因此保留在 `core-service`。
 
-流式入口和非流式入口使用相同的 fingerprint、Provider Key 调度和 `BillingService`。不同之处是响应按事件增量输出。
+### 4.2 Billing 暂不独立
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant S as ModelCallService
-    participant P as ProviderAdapter
-    participant A as Stream accumulator
-    participant B as BillingService
-
-    C->>S: stream=true + optional Idempotency-Key
-    S->>S: claim idempotency and select candidate keys
-    S->>P: open stream with key A
-    alt failure before first provider event
-        P-->>S: error
-        S->>P: open stream with next key
-    else first event received
-        P-->>S: normalized ProviderStreamEvent
-        S->>A: aggregate text, finish reason and usage
-        S-->>C: protocol-specific SSE frame
-    end
-    P-->>S: terminal usage + DONE
-    S->>B: atomically persist usage and charge
-    B-->>S: committed
-    S-->>C: protocol completion frames
-```
-
-关键规则：
-
-- OpenAI-compatible 上游请求自动设置 `stream_options.include_usage=true`。
-- 上游事件先解析成 `ProviderStreamEvent`，再转换为 OpenAI、Anthropic 或 Responses 事件。
-- OpenAI Chat Completions 原始 JSON chunk 会原样透传，避免丢失未知字段。
-- `[DONE]`、`message_stop`、`response.completed` 在计费事务成功后才发送。
-- Provider 未返回完整 usage 时，使用字符数约除以 4 的估算值，并在 `usage_record.usage_source` 标记 `ESTIMATED`。
-- 上游已输出部分事件后失败或客户端断开，会按已发生的部分 usage 计费，幂等记录标记为 `FAILED`。
-- 只有第一个下游可见事件出现前才能切换 Provider Key；已经输出后禁止跨 Key 拼接响应。
-- 完成流会把实际发送的 SSE frames 连同聚合响应存入幂等结果，重复请求可精确重放而不再访问上游或扣费。
-
-## 8. Responses WebSocket
-
-`ResponsesWebSocketConfig` 在以下地址注册升级处理器：
-
-```text
-/v1/responses
-/responses
-/backend-api/codex/responses
-```
-
-客户端在已认证连接上发送 `response.create` JSON。`ResponsesWebSocketHandler` 将其转换为内部 `ChatRequest`，并使用 `GatewayStreamSink` 复用 SSE 的调用、usage 和计费链路。WebSocket 发送的是 Responses JSON 事件本身，不包含 SSE 的 `event:`/`data:` 文本前缀。
-
-每个连接一次只允许一个正在生成的 response。连接内会保留上一轮文本历史和 `response_id`，允许下一轮使用 `previous_response_id` 追加输入；生成失败时该连接内历史会失效，连接断开时也会取消仍在运行的 Provider 流并释放状态。
-
-## 9. Provider Key 调度
-
-候选 SQL 只选择同时满足以下条件的 Key：
-
-- `enabled = true`
-- `status = ACTIVE`
-- `schedulable = true`
-- 未过期
-- 不在 rate-limit、overload 或 temporary-disable 冷却期
-- 没有尚未 reset 且已耗尽的 quota window
-
-排序顺序：用户自有 Key -> `priority` 升序 -> 最久未使用 -> `id`。
-
-```mermaid
-stateDiagram-v2
-    [*] --> ACTIVE
-    ACTIVE --> ACTIVE: success / ordinary failure
-    ACTIVE --> RATE_COOLDOWN: 429
-    ACTIVE --> OVERLOAD_COOLDOWN: 502/503/504/529
-    ACTIVE --> TEMP_COOLDOWN: timeout / unavailable
-    ACTIVE --> ERROR: 401/403
-    RATE_COOLDOWN --> ACTIVE: rate_limited_until reached
-    OVERLOAD_COOLDOWN --> ACTIVE: overloaded_until reached
-    TEMP_COOLDOWN --> ACTIVE: temp_disabled_until reached
-    ERROR --> ACTIVE: administrator updates credential
-```
-
-冷却状态通过时间字段过滤，而不是反复切换 `enabled`。`enabled` 表示人工开关，`schedulable` 表示是否可参与调度，`status=ERROR` 表示需要人工处理。
-
-## 10. 幂等与扣费一致性
-
-request fingerprint 由以下内容生成：
-
-```text
-SHA-256(
-  HTTP method + route + API-key scope + JCS-canonicalized JSON payload
-)
-```
-
-`Idempotency-Key` 本身只保存 SHA-256，不保存明文。`idempotency_record` 的 `(scope, idempotency_key_hash)` 唯一约束保证只有一个请求获得执行权。
-
-扣费事务遵循固定顺序：
+成功计费依赖固定的本地事务顺序：
 
 ```text
 claim usage_billing_dedup
 -> SELECT wallet ... FOR UPDATE
--> validate balance
--> UPDATE wallet
+-> validate and update wallet
 -> INSERT request_log
 -> INSERT usage_record
 -> INSERT wallet_transaction
@@ -263,17 +125,147 @@ claim usage_billing_dedup
 -> COMMIT
 ```
 
-数据库约束提供第二道保护：
+这些表目前都在同一个 MySQL 数据库。拆成独立 Billing 服务会把一个可验证的本地事务转换为分布式事务和跨服务幂等问题。
 
-- `usage_billing_dedup(request_id, api_key_id)` 唯一：同一业务调用只扣一次。
-- `request_log.request_id` 唯一：一条调用只有一个终态日志。
-- `usage_record.request_id` 唯一：一条调用只有一条 usage。
-- `wallet_transaction(request_id, type)` 唯一：同类钱包流水不能重复。
-- 钱包行锁：并发扣减不能同时基于旧余额计算。
+### 4.3 User 暂不独立
 
-## 11. 数据模型关系
+注册同时创建用户、绑定角色并创建钱包；API Key、JWT、钱包查询也共享用户身份。拆分前应先明确用户服务是否拥有钱包初始化、认证数据和 API Key 的职责。
 
-核心关系如下：
+因此当前边界是“边缘网关 + 核心业务服务”，而不是伪装成微服务的多进程共享数据库。
+
+## 5. Spring Cloud 与 Nacos
+
+版本由根 Maven 工程统一管理：
+
+| 组件 | 版本 |
+| --- | --- |
+| Java | 21 |
+| Spring Boot | 3.5.16 |
+| Spring Cloud Release Train | 2025.0.3 |
+| Spring Cloud Alibaba | 2025.0.0.0 |
+| Nacos Server | 3.2.3 |
+
+两个服务都设置固定的 `spring.application.name`，并使用相同的 Nacos 地址。Compose 开启 Nacos 客户端、管理 API 和控制台认证：
+
+```text
+gateway-service
+core-service
+```
+
+配置中心：
+
+| Service | Data ID | Group |
+| --- | --- | --- |
+| `gateway-service` | `gateway-service.yml` | `AI_GATEWAY` |
+| `core-service` | `core-service.yml` | `AI_GATEWAY` |
+
+应用通过 `spring.config.import=optional:nacos:...` 加载配置。`optional:` 允许禁用 Nacos 的单元测试和纯本地逻辑测试启动；Compose 部署会显式启用注册和配置。
+
+Nacos 配置只保存非敏感参数。密码、JWT/Jasypt 密钥和 Provider Key 仍由环境变量或 CI Secret 提供。
+
+生产 Compose 覆盖文件使用必填变量校验，缺少数据库、RabbitMQ、JWT、Jasypt、Nacos 或 Grafana 密钥时拒绝启动。部署流程会在启动业务服务前强制重跑一次 Nacos 配置发布容器，避免复用旧的一次性容器。
+
+## 6. 路由与协议
+
+`gateway-service` 显式声明路由：
+
+| Route | URI | Predicate |
+| --- | --- | --- |
+| `core-http` | `lb://core-service` | `/api/**`、`/v1/**`、`/chat/**`、`/responses/**`、`/backend-api/codex/**` |
+| `core-websocket` | `lb:ws://core-service` | Responses 三个升级路径并且 `Upgrade: websocket` |
+
+WebSocket 路径：
+
+```text
+/v1/responses
+/responses
+/backend-api/codex/responses
+```
+
+业务 API 的状态码、错误 JSON、`Retry-After`、鉴权 Header、`Idempotency-Key` 和流式事件由 `core-service` 决定，网关只透明转发。模型 POST 路由不配置自动重试，避免重复上游调用和重复扣费。
+
+## 7. 请求 ID 与信任边界
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant G as gateway-service
+    participant S as core-service
+    participant L as Core log
+
+    C->>G: request + optional X-Request-Id
+    G->>G: validate or generate UUID
+    G->>G: remove spoofable internal headers
+    G->>S: forward X-Request-Id
+    S->>S: put requestId into MDC
+    S->>L: log with the same requestId
+    S-->>G: response + X-Request-Id
+    G-->>C: response + X-Request-Id
+```
+
+请求 ID 的约束：
+
+- 只接受 `[A-Za-z0-9._:-]+`；
+- 最长 128 字符；
+- 缺失或不合法时生成 UUID；
+- 每次请求结束后从 MDC 删除，防止线程复用污染下一次请求。
+
+`X-Request-Id` 用于排查，不是认证凭证。客户端传入的 `X-Internal-Token` 和 `X-User-Id` 会在边缘网关删除。
+
+## 8. 非流式模型调用
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant G as Gateway
+    participant S as ModelCallService
+    participant K as ProviderKeySelector
+    participant P as ProviderAdapter
+    participant B as BillingService
+    participant DB as MySQL
+    participant R as RabbitMQ
+
+    C->>G: POST + API Key + optional Idempotency-Key
+    G->>S: load-balanced forwarding
+    S->>DB: claim idempotency record
+    S->>S: resolve model and check wallet
+    S->>K: ordered Provider credentials
+    loop before terminal result
+        S->>P: invoke with candidate credential
+        P-->>S: response or error
+        S->>DB: update Provider Key health
+    end
+    S->>B: persist result and usage
+    B->>DB: local billing transaction
+    DB-->>B: committed + newlyRecorded
+    alt first successful record
+        S->>R: best-effort request and usage events
+    else duplicate
+        S->>S: skip duplicate event publication
+    end
+    S-->>C: protocol-shaped response
+```
+
+RabbitMQ 发布发生在数据库事务提交之后。发布异常会记录错误但不会把已扣费的模型调用改判成失败。这保证核心结果优先，但仍存在消息丢失窗口。
+
+## 9. SSE 与 WebSocket
+
+HTTP SSE 和 Responses WebSocket 最终都复用 `ModelCallService`、Provider Key 调度、流事件适配和 `BillingService`。
+
+关键规则：
+
+- 上游事件先转成 `ProviderStreamEvent`，再转为 OpenAI、Anthropic 或 Responses 事件；
+- OpenAI 兼容请求设置 `stream_options.include_usage=true`；
+- 只在第一个客户端可见事件之前允许切换 Provider Key；
+- `[DONE]`、`message_stop`、`response.completed` 在计费事务成功后才发送；
+- Provider 未返回完整 usage 时使用估算值并标记 `ESTIMATED`；
+- 上游已经输出后失败或客户端断开时，按已经发生的部分 usage 计费；
+- WebSocket 升级与双向帧必须由 Nginx、Gateway 和 Core 三层共同保持；
+- SSE 三层都必须关闭会聚合事件的代理缓冲，并允许长读取超时。
+
+## 10. 数据归属和一致性
+
+当前全部业务数据仍归 `core-service` 所有：
 
 ```text
 user_account 1--1 wallet
@@ -281,64 +273,105 @@ user_account 1--N api_key
 provider 1--N provider_key
 provider 1--N model 1--N pricing_rule
 provider_key 1--N provider_key_quota_window
-request_log 1--0..1 usage_record (via request_id)
+request_log 1--0..1 usage_record
 wallet 1--N wallet_transaction
 api_key 1--N idempotency_record
 api_key 1--N usage_billing_dedup
 ```
 
-`request_log.provider_key_id` 和 `usage_record.provider_key_id` 保存最终实际使用的上游 Key，便于成本、错误率和额度分析。
+数据库约束提供最终保护：
 
-## 12. 配置边界
+- `usage_billing_dedup(request_id, api_key_id)` 唯一；
+- `request_log.request_id` 唯一；
+- `usage_record.request_id` 唯一；
+- `wallet_transaction(request_id, type)` 唯一；
+- 钱包行通过 `SELECT ... FOR UPDATE` 串行扣减。
 
-主要配置位于 `application.yml`：
+不能因为新增了服务发现，就让两个服务直接共享和修改同一组业务表。未来如果提取新服务，应先指定表的唯一所有者，并通过 API 或事件访问。
 
-- `spring.datasource.*`：MySQL。
-- `spring.data.redis.*`：Redis。
-- `spring.rabbitmq.*`：RabbitMQ 连接以及 listener 手动确认、prefetch 和并发参数；均可通过 `RABBITMQ_*` 环境变量覆盖。
-- `gateway.rate-limit.*`：固定窗口参数。
-- `gateway.upstream.*`：连接、读、响应和事件间超时。
-- `gateway.provider-key.max-failover-attempts`：单次调用最多候选 Key 数。
-- `providers.*`：Provider 默认 base URL 和环境变量回退。
-- `JASYPT_PASSWORD`：Provider Key 加密主密码，生产环境必须显式提供。
-- `JWT_SECRET`：JWT 签名密钥，生产环境不能使用默认值。
-- `docker-compose.yml`：编排应用、MySQL、Redis、RabbitMQ、Nginx 和 Prometheus；当前发布宿主机 `8088` 到 Nginx `80`，并发布宿主机 `9090` 到 Prometheus `9090`。
-- `monitoring/prometheus.yml`：每 15 秒从 `app:8080/actuator/prometheus` 抓取应用指标。
-- `nginx/default.conf`：Compose 实际挂载的 HTTP `/api/` 与 SSE 代理配置。
-- `nginx/https.conf.example`：未加载的域名、证书和 443 入口模板。
+## 11. RabbitMQ 边界
 
-## 13. 扩展方式
+当前 Topic Exchange、持久 Queue、版本化 JSON 事件、生产者和手动 ACK Consumer 已存在。非流式成功链路在首次落库后发布：
 
-新增 Provider：
+```text
+request.completed
+usage.recorded
+```
 
-1. 实现 `ProviderAdapter`。
-2. 在 `providerCodes()` 注册代码。
-3. 将非流式响应映射为 `ChatResponse`。
-4. 将流式响应映射为 `ProviderStreamEvent`。
-5. 在 `data.sql`/管理数据中增加 provider、model 和 pricing rule。
+Consumer 当前只记录事件，尚未生成独立投影。当前发布是 best-effort：
 
-新增下游流协议：
+```text
+database commit
+-> publish events
+```
 
-1. 在 `GatewayStreamProtocol` 增加枚举。
-2. 在 `GatewayStreamResponseAdapter.Session` 增加事件映射。
-3. 控制器或新传输使用 `ModelCallService.streamToSink()`。
+数据库提交后应用退出或 Broker 不可用可能丢事件。后续可靠化顺序应为：
 
-新增 Provider Key 类型策略时，应把额度探测、认证头和 base URL 规则放在独立策略中，不要把类型分支继续堆入 `ModelCallService`。
+```text
+Transactional Outbox
+-> publisher confirm / retry
+-> consumer idempotency
+-> dead-letter queue
+```
 
-## 14. 当前边界
+## 12. 部署与网络
 
-- `OpenAiAdapter` 和 OpenRouter 路径已实现；原生 `ClaudeAdapter`、`GeminiAdapter` 仍是明确的占位实现。
-- Anthropic Messages 和 Responses 的当前兼容层以文本消息为主；完整原生工具调用、多模态内容和所有事件类型仍需分别建模。
-- `provider_key_quota_window` 已参与调度过滤，但尚无按 Provider 类型自动同步 5 小时/周额度的后台任务。
-- WebSocket `previous_response_id` 只在当前连接内保存文本历史，不提供跨进程或断线恢复。
-- usage 估算是 Provider 不返回 usage 时的保底方案，不能代替官方 tokenizer 或 Provider 账单对账。
-- RabbitMQ 当前接入非流式成功请求：只有首次完成 billing dedup 和核心事务时，`ModelCallService` 才 best-effort 发布 `request.completed` 与 `usage.recorded`；Consumer 仍只记录日志，不写数据库。流式成功/失败事件、Confirm、重试、死信、幂等消费和 Outbox 尚未实现。
-- HTTPS 目前仅提供配置模板；真实域名、证书申请、443 映射、证书挂载和自动续期尚未启用。
+```mermaid
+flowchart TB
+    Internet["Internet"]
+    Host["Linux 106.53.192.153"]
+    Nginx["Nginx\n0.0.0.0:8088 -> :80"]
+    Network["Docker internal network"]
+    Gateway["gateway-service :8080"]
+    Core["core-service :8081"]
+    Infra["Nacos / MySQL / Redis / RabbitMQ"]
 
-## 15. 验证策略
+    Internet --> Host --> Nginx --> Gateway --> Core --> Infra
+```
 
-- 纯单元测试覆盖 fingerprint、计费去重、固定窗口、Provider Key 状态、非流式 failover、流式 failover、usage 聚合、三种 SSE 协议和 WebSocket 续接。
-- `UserMapperIntegrationTest` 使用 MySQL Testcontainer；Docker 不可用时由 JUnit 明确跳过。
-- `RabbitMessagingSkeletonTest` 在不连接 Broker 的情况下验证持久拓扑、发布路由/消息持久属性和手动 ACK。
-- 修改数据库结构时同时更新 `sql/schema.sql` 和对应日期的幂等迁移脚本。
-- 修改流式协议时至少验证事件顺序、终止事件、usage、错误事件和幂等重放。
+公网入口：
+
+```text
+http://106.53.192.153:8088
+```
+
+MySQL、Redis、RabbitMQ 和 Nacos 不能发布到 `0.0.0.0`。需要本机诊断的管理端口应绑定 `127.0.0.1`，通过 SSH 隧道访问。
+
+主要容器设置了总计约 2.9 GiB 的内存上限，为 3.6 GiB 主机上的 Linux 和 Docker 保留空间。Prometheus 与 Grafana 使用固定版本镜像，避免无界资源竞争或浮动标签升级造成不可重复部署。
+
+Prometheus 分别抓取：
+
+```text
+gateway-service:8080/actuator/prometheus
+core-service:8081/actuator/prometheus
+```
+
+## 13. CI/CD 与回滚
+
+GitHub Actions 流程：
+
+```text
+push / pull request
+-> mvn clean verify
+-> build gateway-service image
+-> build core-service image
+-> main push: push both SHA tags
+-> erent environment approval
+-> SSH deploy with Compose
+-> nginx -t and reload
+-> local + public health check
+```
+
+两个镜像使用同一个 commit SHA。手动 `workflow_dispatch` 接受以前成功发布的 SHA，以同一标签重新部署两个服务，作为最小回滚机制。
+
+## 14. 当前能力边界
+
+- `RefreshTokenService` 使用进程内存；`core-service` 暂时单副本，重启会让旧 Refresh Token 失效。
+- Nacos 是 standalone 单节点，Nacos 故障会影响新实例发现和动态配置，不具备生产高可用。
+- RabbitMQ 发布是 best-effort，尚无 Outbox、自动补发和完整死信处理。
+- `core-service` 仍是一个按包分层的模块化单体，Provider、Billing、User 尚未独立。
+- 当前没有服务间独立认证协议；只有网关到核心服务一跳，核心服务也不应直接暴露公网。
+- HTTPS 需要域名和真实证书后单独启用。
+- 当前服务器资源有限，不以堆叠更多中间件或大量 JVM 为目标。
+
+下一次拆分的前置条件不是“类很多”，而是某个领域已经具备稳定职责、独立数据所有权、清晰 API/事件合同和可独立验证的发布价值。

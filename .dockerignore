@@ -1,7 +1,10 @@
-target/
+**/target/
 .git/
 .idea/
 .vscode/
 logs/
+**/logs/
 *.log
 .env
+.env.*
+!.env.example

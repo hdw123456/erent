@@ -1,6 +1,21 @@
 spring:
   application:
-    name: ai-gateway
+    name: core-service
+  config:
+    import:
+      - optional:nacos:core-service.yml?group=${NACOS_CONFIG_GROUP:AI_GATEWAY}&refreshEnabled=true
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      config:
+        enabled: ${NACOS_CONFIG_ENABLED:false}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+      discovery:
+        enabled: ${NACOS_DISCOVERY_ENABLED:false}
+        register-enabled: ${NACOS_DISCOVERY_ENABLED:false}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
   # MySQL stores identity, provider scheduling, usage, and wallet state.
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:ai_gateway}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
@@ -35,7 +50,7 @@ mybatis:
     map-underscore-to-camel-case: true
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT:8081}
 
 gateway:
   # Limits are evaluated independently for API key, user, and source IP.
@@ -59,7 +74,10 @@ logging:
   level:
     com.example.aigateway: info
   file:
-    name: logs/ai-gateway.log
+    name: logs/core-service.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [%X{requestId:-system}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [%X{requestId:-system}] %logger{36} - %msg%n"
 
 jasypt:
   encryptor:
@@ -84,4 +102,8 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,prometheus
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
